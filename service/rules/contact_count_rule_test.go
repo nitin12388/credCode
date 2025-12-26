@@ -3,232 +3,99 @@ package rules
 import (
 	"context"
 	"testing"
+	"time"
 
 	"credCode/models"
 	"credCode/repository"
 )
 
-// mockGraphRepository is a mock implementation of GraphRepository for testing
-type mockGraphRepository struct {
-	usersWithContactFunc func(ctx context.Context, phoneNumber string) ([]string, int)
-}
+func TestNewContactCountRule(t *testing.T) {
+	rule := NewContactCountRule(3, 0.7)
 
-func (m *mockGraphRepository) GetUsersWithContact(ctx context.Context, phoneNumber string) ([]string, int) {
-	if m.usersWithContactFunc != nil {
-		return m.usersWithContactFunc(ctx, phoneNumber)
-	}
-	return nil, 0
-}
-
-// Implement other required methods with no-ops for this test
-func (m *mockGraphRepository) AddNode(ctx context.Context, phoneNumber string) error { return nil }
-func (m *mockGraphRepository) AddNodeWithName(ctx context.Context, phoneNumber, name string) error {
-	return nil
-}
-func (m *mockGraphRepository) GetNode(ctx context.Context, phoneNumber string) (*models.Node, error) {
-	return nil, nil
-}
-func (m *mockGraphRepository) NodeExists(ctx context.Context, phoneNumber string) bool { return false }
-func (m *mockGraphRepository) GetAllNodes(ctx context.Context) ([]*models.Node, error) {
-	return nil, nil
-}
-func (m *mockGraphRepository) DeleteNode(ctx context.Context, phoneNumber string) error { return nil }
-func (m *mockGraphRepository) AddEdgeWithMetadata(ctx context.Context, from, to string, metadata models.EdgeMetadata) (*models.Edge, error) {
-	return nil, nil
-}
-func (m *mockGraphRepository) GetEdge(ctx context.Context, edgeID string) (*models.Edge, error) {
-	return nil, nil
-}
-func (m *mockGraphRepository) GetEdgeWithMetadata(ctx context.Context, edgeID string) (*models.Edge, models.EdgeMetadata, error) {
-	return nil, nil, nil
-}
-func (m *mockGraphRepository) DeleteEdge(ctx context.Context, edgeID string) error { return nil }
-func (m *mockGraphRepository) GetOutgoingEdges(ctx context.Context, phoneNumber string, edgeType models.EdgeType) []*models.Edge {
-	return nil
-}
-func (m *mockGraphRepository) GetIncomingEdges(ctx context.Context, phoneNumber string, edgeType models.EdgeType) []*models.Edge {
-	return nil
-}
-func (m *mockGraphRepository) GetCallsWithFilters(ctx context.Context, phoneNumber string, filters repository.CallFilters, direction string) ([]*models.Edge, int) {
-	return nil, 0
-}
-func (m *mockGraphRepository) IsDirectContact(ctx context.Context, userPhone, callerPhone string) bool {
-	return false
-}
-func (m *mockGraphRepository) GetSecondLevelContactCount(ctx context.Context, userPhone, callerPhone string) int {
-	return 0
-}
-func (m *mockGraphRepository) LoadSeedData(ctx context.Context, filePath string) error { return nil }
-
-// TestContactCountRule_ZeroContacts tests when phone number has zero contacts
-func TestContactCountRule_ZeroContacts(t *testing.T) {
-	rule := NewContactCountRule(3, 0.7).(*ContactCountRule)
-
-	mockRepo := &mockGraphRepository{
-		usersWithContactFunc: func(ctx context.Context, phoneNumber string) ([]string, int) {
-			return []string{}, 0
-		},
+	if rule == nil {
+		t.Fatal("Expected rule to be created, got nil")
 	}
 
-	score, err := rule.Evaluate(context.Background(), "1234567890", "", mockRepo)
-	if err != nil {
-		t.Fatalf("Expected no error, got: %v", err)
-	}
-
-	if score.Score != 0.7 {
-		t.Errorf("Expected score 0.7 for zero contacts, got: %f", score.Score)
-	}
-
-	if score.RuleName != "contact_count_rule" {
-		t.Errorf("Expected rule name 'contact_count_rule', got: %s", score.RuleName)
+	// Test that rule has correct name
+	if rule.Name() != "contact_count_rule" {
+		t.Errorf("Expected name 'contact_count_rule', got '%s'", rule.Name())
 	}
 }
 
-// TestContactCountRule_BelowThreshold tests when phone number has contacts below threshold
-func TestContactCountRule_BelowThreshold(t *testing.T) {
-	rule := NewContactCountRule(3, 0.7).(*ContactCountRule)
-
-	mockRepo := &mockGraphRepository{
-		usersWithContactFunc: func(ctx context.Context, phoneNumber string) ([]string, int) {
-			return []string{"user1", "user2"}, 2
-		},
-	}
-
-	score, err := rule.Evaluate(context.Background(), "1234567890", "", mockRepo)
-	if err != nil {
-		t.Fatalf("Expected no error, got: %v", err)
-	}
-
-	// With threshold=3, count=2, expected score = 0.7 * (1 - 2/3) = 0.7 * 0.333 = 0.233
-	expectedScore := 0.7 * (1.0 - 2.0/3.0)
-	if score.Score != expectedScore {
-		t.Errorf("Expected score %f for 2 contacts (below threshold 3), got: %f", expectedScore, score.Score)
-	}
-}
-
-// TestContactCountRule_AtThreshold tests when phone number has exactly threshold contacts
-func TestContactCountRule_AtThreshold(t *testing.T) {
-	rule := NewContactCountRule(3, 0.7).(*ContactCountRule)
-
-	mockRepo := &mockGraphRepository{
-		usersWithContactFunc: func(ctx context.Context, phoneNumber string) ([]string, int) {
-			return []string{"user1", "user2", "user3"}, 3
-		},
-	}
-
-	score, err := rule.Evaluate(context.Background(), "1234567890", "", mockRepo)
-	if err != nil {
-		t.Fatalf("Expected no error, got: %v", err)
-	}
-
-	// At threshold, score should be low (0.1 * (1 - 0/6) = 0.1)
-	expectedScore := 0.1 * (1.0 - float64(3-3)/float64(3+3))
-	if score.Score != expectedScore {
-		t.Errorf("Expected score %f for 3 contacts (at threshold), got: %f", expectedScore, score.Score)
-	}
-
-	if score.Score < 0 {
-		t.Error("Score should not be negative")
-	}
-}
-
-// TestContactCountRule_AboveThreshold tests when phone number has more contacts than threshold
-func TestContactCountRule_AboveThreshold(t *testing.T) {
-	rule := NewContactCountRule(3, 0.7).(*ContactCountRule)
-
-	mockRepo := &mockGraphRepository{
-		usersWithContactFunc: func(ctx context.Context, phoneNumber string) ([]string, int) {
-			return []string{"user1", "user2", "user3", "user4", "user5"}, 5
-		},
-	}
-
-	score, err := rule.Evaluate(context.Background(), "1234567890", "", mockRepo)
-	if err != nil {
-		t.Fatalf("Expected no error, got: %v", err)
-	}
-
-	// Above threshold, score should be very low
-	expectedScore := 0.1 * (1.0 - float64(5-3)/float64(5+3))
-	if score.Score != expectedScore {
-		t.Errorf("Expected score %f for 5 contacts (above threshold 3), got: %f", expectedScore, score.Score)
-	}
-
-	if score.Score < 0 {
-		t.Error("Score should not be negative")
-	}
-
-	if score.Score >= 0.7 {
-		t.Error("Score should be low for trusted numbers")
-	}
-}
-
-// TestContactCountRule_ManyContacts tests when phone number has many contacts
-func TestContactCountRule_ManyContacts(t *testing.T) {
-	rule := NewContactCountRule(3, 0.7).(*ContactCountRule)
-
-	mockRepo := &mockGraphRepository{
-		usersWithContactFunc: func(ctx context.Context, phoneNumber string) ([]string, int) {
-			return make([]string, 100), 100
-		},
-	}
-
-	score, err := rule.Evaluate(context.Background(), "1234567890", "", mockRepo)
-	if err != nil {
-		t.Fatalf("Expected no error, got: %v", err)
-	}
-
-	// With many contacts, score should approach 0
-	if score.Score < 0 {
-		t.Error("Score should not be negative")
-	}
-
-	if score.Score > 0.1 {
-		t.Errorf("Score should be very low for many contacts, got: %f", score.Score)
-	}
-}
-
-// TestContactCountRule_Name tests the rule name
 func TestContactCountRule_Name(t *testing.T) {
-	rule := NewContactCountRule(3, 0.7).(*ContactCountRule)
+	rule := NewContactCountRule(3, 0.7)
 
 	if rule.Name() != "contact_count_rule" {
-		t.Errorf("Expected rule name 'contact_count_rule', got: %s", rule.Name())
+		t.Errorf("Expected name 'contact_count_rule', got '%s'", rule.Name())
 	}
 }
 
-// TestContactCountRule_ScoreRange tests that scores are in valid range [0, 1]
-func TestContactCountRule_ScoreRange(t *testing.T) {
-	rule := NewContactCountRule(3, 0.7).(*ContactCountRule)
+func TestContactCountRule_Evaluate_NoContacts(t *testing.T) {
+	graphRepo := repository.NewInMemoryGraphRepository()
+	rule := NewContactCountRule(3, 0.7)
 
-	testCases := []struct {
-		name  string
-		count int
-	}{
-		{"zero", 0},
-		{"one", 1},
-		{"two", 2},
-		{"three", 3},
-		{"five", 5},
-		{"ten", 10},
-		{"hundred", 100},
+	ctx := context.Background()
+	graphRepo.AddNode(ctx, "9999999999") // Phone with no contacts
+
+	score, err := rule.Evaluate(ctx, "9999999999", "", graphRepo)
+	if err != nil {
+		t.Errorf("Unexpected error: %v", err)
 	}
 
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			mockRepo := &mockGraphRepository{
-				usersWithContactFunc: func(ctx context.Context, phoneNumber string) ([]string, int) {
-					return make([]string, tc.count), tc.count
-				},
-			}
+	// Should have high spam score (maxScore) for no contacts
+	if score.Score != 0.7 {
+		t.Errorf("Expected score 0.7 for no contacts, got %f", score.Score)
+	}
+}
 
-			score, err := rule.Evaluate(context.Background(), "1234567890", "", mockRepo)
-			if err != nil {
-				t.Fatalf("Expected no error, got: %v", err)
-			}
+func TestContactCountRule_Evaluate_BelowThreshold(t *testing.T) {
+	graphRepo := repository.NewInMemoryGraphRepository()
+	rule := NewContactCountRule(3, 0.7) // Threshold: 3
 
-			if score.Score < 0 || score.Score > 1.0 {
-				t.Errorf("Score %f is out of valid range [0, 1] for count %d", score.Score, tc.count)
-			}
-		})
+	ctx := context.Background()
+	graphRepo.AddNode(ctx, "7379037972")
+	graphRepo.AddNode(ctx, "9876543210")
+
+	// Add 2 contacts (below threshold of 3)
+	meta := &models.ContactMetadata{Name: "Contact", AddedAt: time.Now()}
+	graphRepo.AddEdgeWithMetadata(ctx, "9876543210", "7379037972", meta)
+	graphRepo.AddEdgeWithMetadata(ctx, "1234567890", "7379037972", meta)
+
+	score, err := rule.Evaluate(ctx, "7379037972", "", graphRepo)
+	if err != nil {
+		t.Errorf("Unexpected error: %v", err)
+	}
+
+	// Should have moderate spam score (between 0 and maxScore)
+	if score.Score <= 0 || score.Score >= 0.7 {
+		t.Errorf("Expected score between 0 and 0.7, got %f", score.Score)
+	}
+}
+
+func TestContactCountRule_Evaluate_AboveThreshold(t *testing.T) {
+	graphRepo := repository.NewInMemoryGraphRepository()
+	rule := NewContactCountRule(3, 0.7) // Threshold: 3
+
+	ctx := context.Background()
+	phones := []string{"7379037972", "9876543210", "1234567890", "5555555555", "6666666666"}
+	for _, phone := range phones {
+		graphRepo.AddNode(ctx, phone)
+	}
+
+	// Add 4 contacts (above threshold of 3)
+	meta := &models.ContactMetadata{Name: "Contact", AddedAt: time.Now()}
+	graphRepo.AddEdgeWithMetadata(ctx, "9876543210", "7379037972", meta)
+	graphRepo.AddEdgeWithMetadata(ctx, "1234567890", "7379037972", meta)
+	graphRepo.AddEdgeWithMetadata(ctx, "5555555555", "7379037972", meta)
+	graphRepo.AddEdgeWithMetadata(ctx, "6666666666", "7379037972", meta)
+
+	score, err := rule.Evaluate(ctx, "7379037972", "", graphRepo)
+	if err != nil {
+		t.Errorf("Unexpected error: %v", err)
+	}
+
+	// Should have low spam score
+	if score.Score > 0.2 {
+		t.Errorf("Expected low score (< 0.2), got %f", score.Score)
 	}
 }

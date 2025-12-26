@@ -1,0 +1,2381 @@
+
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+		<title>api: Go Coverage Report</title>
+		<style>
+			body {
+				background: black;
+				color: rgb(80, 80, 80);
+			}
+			body, pre, #legend span {
+				font-family: Menlo, monospace;
+				font-weight: bold;
+			}
+			#topbar {
+				background: black;
+				position: fixed;
+				top: 0; left: 0; right: 0;
+				height: 42px;
+				border-bottom: 1px solid rgb(80, 80, 80);
+			}
+			#content {
+				margin-top: 50px;
+			}
+			#nav, #legend {
+				float: left;
+				margin-left: 10px;
+			}
+			#legend {
+				margin-top: 12px;
+			}
+			#nav {
+				margin-top: 10px;
+			}
+			#legend span {
+				margin: 0 5px;
+			}
+			.cov0 { color: rgb(192, 0, 0) }
+.cov1 { color: rgb(128, 128, 128) }
+.cov2 { color: rgb(116, 140, 131) }
+.cov3 { color: rgb(104, 152, 134) }
+.cov4 { color: rgb(92, 164, 137) }
+.cov5 { color: rgb(80, 176, 140) }
+.cov6 { color: rgb(68, 188, 143) }
+.cov7 { color: rgb(56, 200, 146) }
+.cov8 { color: rgb(44, 212, 149) }
+.cov9 { color: rgb(32, 224, 152) }
+.cov10 { color: rgb(20, 236, 155) }
+
+		</style>
+	</head>
+	<body>
+		<div id="topbar">
+			<div id="nav">
+				<select id="files">
+				
+				<option value="file0">credCode/api/errors.go (83.3%)</option>
+				
+				<option value="file1">credCode/api/handler.go (84.2%)</option>
+				
+				<option value="file2">credCode/api/response.go (100.0%)</option>
+				
+				<option value="file3">credCode/api/server.go (0.0%)</option>
+				
+				<option value="file4">credCode/api/validator.go (100.0%)</option>
+				
+				<option value="file5">credCode/models/graph.go (76.2%)</option>
+				
+				<option value="file6">credCode/repository/graph_repository.go (70.0%)</option>
+				
+				<option value="file7">credCode/repository/user_repository.go (80.2%)</option>
+				
+				<option value="file8">credCode/service/graph_builder.go (0.0%)</option>
+				
+				<option value="file9">credCode/service/rules/call_pattern_rule.go (94.4%)</option>
+				
+				<option value="file10">credCode/service/rules/contact_count_rule.go (93.8%)</option>
+				
+				<option value="file11">credCode/service/rules/second_level_contact_rule.go (95.2%)</option>
+				
+				<option value="file12">credCode/service/spam_detection_service.go (43.5%)</option>
+				
+				<option value="file13">credCode/service/spam_rule.go (66.7%)</option>
+				
+				</select>
+			</div>
+			<div id="legend">
+				<span>not tracked</span>
+			
+				<span class="cov0">not covered</span>
+				<span class="cov8">covered</span>
+			
+			</div>
+		</div>
+		<div id="content">
+		
+		<pre class="file" id="file0" style="display: none">package api
+
+import (
+        "encoding/json"
+        "net/http"
+)
+
+// ErrorResponse represents an error response
+type ErrorResponse struct {
+        Error   string `json:"error"`
+        Message string `json:"message,omitempty"`
+}
+
+// WriteError writes an error response to the HTTP response writer
+func WriteError(w http.ResponseWriter, statusCode int, message string) <span class="cov8" title="1">{
+        w.Header().Set("Content-Type", "application/json")
+        w.WriteHeader(statusCode)
+        json.NewEncoder(w).Encode(ErrorResponse{
+                Error:   http.StatusText(statusCode),
+                Message: message,
+        })
+}</span>
+
+// WriteBadRequest writes a 400 Bad Request error
+func WriteBadRequest(w http.ResponseWriter, message string) <span class="cov8" title="1">{
+        WriteError(w, http.StatusBadRequest, message)
+}</span>
+
+// WriteInternalServerError writes a 500 Internal Server Error
+func WriteInternalServerError(w http.ResponseWriter, message string) <span class="cov0" title="0">{
+        WriteError(w, http.StatusInternalServerError, message)
+}</span>
+
+// WriteMethodNotAllowed writes a 405 Method Not Allowed error
+func WriteMethodNotAllowed(w http.ResponseWriter) <span class="cov8" title="1">{
+        WriteError(w, http.StatusMethodNotAllowed, "Method not allowed")
+}</span>
+
+</pre>
+		
+		<pre class="file" id="file1" style="display: none">package api
+
+import (
+        "encoding/json"
+        "net/http"
+
+        "credCode/models"
+        "credCode/service"
+)
+
+// SpamDetectionHandler handles spam detection API requests
+type SpamDetectionHandler struct {
+        spamService *service.SpamDetectionService
+        validator   RequestValidator
+}
+
+// NewSpamDetectionHandler creates a new spam detection handler
+func NewSpamDetectionHandler(spamService *service.SpamDetectionService) *SpamDetectionHandler <span class="cov8" title="1">{
+        return &amp;SpamDetectionHandler{
+                spamService: spamService,
+                validator:   NewRequestValidator(),
+        }
+}</span>
+
+// DetectSpam handles POST /api/v1/spam/detect
+func (h *SpamDetectionHandler) DetectSpam(w http.ResponseWriter, r *http.Request) <span class="cov8" title="1">{
+        // Only allow POST method
+        if r.Method != http.MethodPost </span><span class="cov8" title="1">{
+                WriteMethodNotAllowed(w)
+                return
+        }</span>
+
+        // Parse request body
+        <span class="cov8" title="1">var req models.SpamDetectionRequest
+        if err := json.NewDecoder(r.Body).Decode(&amp;req); err != nil </span><span class="cov8" title="1">{
+                WriteBadRequest(w, "Invalid request body: "+err.Error())
+                return
+        }</span>
+
+        // Validate request
+        <span class="cov8" title="1">if err := h.validator.ValidateSpamRequest(&amp;req); err != nil </span><span class="cov8" title="1">{
+                WriteBadRequest(w, err.Error())
+                return
+        }</span>
+
+        // Detect spam (pass user phone number if provided)
+        <span class="cov8" title="1">result, err := h.spamService.DetectSpam(req.PhoneNumber, req.UserPhoneNumber)
+        if err != nil </span><span class="cov0" title="0">{
+                WriteInternalServerError(w, "Error detecting spam: "+err.Error())
+                return
+        }</span>
+
+        // Return result
+        <span class="cov8" title="1">WriteSuccess(w, result)</span>
+}
+
+// GetSpamScore handles GET /api/v1/spam/score?phone_number=...
+func (h *SpamDetectionHandler) GetSpamScore(w http.ResponseWriter, r *http.Request) <span class="cov8" title="1">{
+        if r.Method != http.MethodGet </span><span class="cov8" title="1">{
+                WriteMethodNotAllowed(w)
+                return
+        }</span>
+
+        // Get phone numbers from query parameters
+        <span class="cov8" title="1">phoneNumber := r.URL.Query().Get("phone_number")
+        if phoneNumber == "" </span><span class="cov8" title="1">{
+                WriteBadRequest(w, "phone_number query parameter is required")
+                return
+        }</span>
+
+        // User phone number is optional
+        <span class="cov8" title="1">userPhoneNumber := r.URL.Query().Get("user_phone_number")
+
+        // Create request object for validation
+        req := models.SpamDetectionRequest{
+                PhoneNumber:     phoneNumber,
+                UserPhoneNumber: userPhoneNumber,
+        }
+
+        // Validate request
+        if err := h.validator.ValidateSpamRequest(&amp;req); err != nil </span><span class="cov0" title="0">{
+                WriteBadRequest(w, err.Error())
+                return
+        }</span>
+
+        // Detect spam
+        <span class="cov8" title="1">result, err := h.spamService.DetectSpam(phoneNumber, userPhoneNumber)
+        if err != nil </span><span class="cov0" title="0">{
+                WriteInternalServerError(w, "Error detecting spam: "+err.Error())
+                return
+        }</span>
+
+        // Return result
+        <span class="cov8" title="1">WriteSuccess(w, result)</span>
+}
+
+// GetRules handles GET /api/v1/spam/rules
+func (h *SpamDetectionHandler) GetRules(w http.ResponseWriter, r *http.Request) <span class="cov8" title="1">{
+        if r.Method != http.MethodGet </span><span class="cov8" title="1">{
+                WriteMethodNotAllowed(w)
+                return
+        }</span>
+
+        <span class="cov8" title="1">rules := h.spamService.GetRegisteredRules()
+
+        WriteSuccess(w, map[string]interface{}{
+                "rules": rules,
+                "count": len(rules),
+        })</span>
+}
+</pre>
+		
+		<pre class="file" id="file2" style="display: none">package api
+
+import (
+        "encoding/json"
+        "net/http"
+)
+
+// WriteJSON writes a JSON response to the HTTP response writer
+func WriteJSON(w http.ResponseWriter, statusCode int, data interface{}) error <span class="cov8" title="1">{
+        w.Header().Set("Content-Type", "application/json")
+        w.WriteHeader(statusCode)
+        return json.NewEncoder(w).Encode(data)
+}</span>
+
+// WriteSuccess writes a successful JSON response
+func WriteSuccess(w http.ResponseWriter, data interface{}) error <span class="cov8" title="1">{
+        return WriteJSON(w, http.StatusOK, data)
+}</span>
+
+</pre>
+		
+		<pre class="file" id="file3" style="display: none">package api
+
+import (
+        "fmt"
+        "log"
+        "net/http"
+
+        "credCode/service"
+)
+
+// Server represents the HTTP server
+type Server struct {
+        handler *SpamDetectionHandler
+        port    string
+}
+
+// NewServer creates a new HTTP server
+func NewServer(spamService *service.SpamDetectionService, port string) *Server <span class="cov0" title="0">{
+        return &amp;Server{
+                handler: NewSpamDetectionHandler(spamService),
+                port:    port,
+        }
+}</span>
+
+// Start starts the HTTP server
+func (s *Server) Start() error <span class="cov0" title="0">{
+        // Register routes
+        http.HandleFunc("/api/v1/spam/detect", s.handler.DetectSpam)
+        http.HandleFunc("/api/v1/spam/score", s.handler.GetSpamScore)
+        http.HandleFunc("/api/v1/spam/rules", s.handler.GetRules)
+        http.HandleFunc("/health", s.healthCheck)
+
+        addr := fmt.Sprintf(":%s", s.port)
+        log.Printf("Starting server on port %s", s.port)
+        log.Printf("API endpoints:")
+        log.Printf("  POST /api/v1/spam/detect - Detect spam (JSON: phone_number, user_phone_number)")
+        log.Printf("  GET  /api/v1/spam/score  - Get spam score (query: phone_number, user_phone_number)")
+        log.Printf("  GET  /api/v1/spam/rules  - Get registered rules")
+        log.Printf("  GET  /health             - Health check")
+
+        return http.ListenAndServe(addr, nil)
+}</span>
+
+// healthCheck handles health check requests
+func (s *Server) healthCheck(w http.ResponseWriter, r *http.Request) <span class="cov0" title="0">{
+        w.Header().Set("Content-Type", "application/json")
+        w.WriteHeader(http.StatusOK)
+        fmt.Fprintf(w, `{"status":"healthy"}`)
+}</span>
+</pre>
+		
+		<pre class="file" id="file4" style="display: none">package api
+
+import (
+        "errors"
+
+        "credCode/models"
+)
+
+// RequestValidator defines the interface for request validation
+type RequestValidator interface {
+        ValidateSpamRequest(req *models.SpamDetectionRequest) error
+}
+
+// spamRequestValidator implements RequestValidator
+type spamRequestValidator struct{}
+
+// NewRequestValidator creates a new request validator
+func NewRequestValidator() RequestValidator <span class="cov8" title="1">{
+        return &amp;spamRequestValidator{}
+}</span>
+
+// ValidateSpamRequest validates a spam detection request
+func (v *spamRequestValidator) ValidateSpamRequest(req *models.SpamDetectionRequest) error <span class="cov8" title="1">{
+        if req.PhoneNumber == "" </span><span class="cov8" title="1">{
+                return errors.New("phone number is required")
+        }</span>
+        <span class="cov8" title="1">return nil</span>
+}
+
+</pre>
+		
+		<pre class="file" id="file5" style="display: none">package models
+
+import (
+        "errors"
+        "fmt"
+        "time"
+)
+
+// Node represents a phone number node in the graph
+type Node struct {
+        PhoneNumber string `json:"phone_number"`
+        Name        string `json:"name"`
+}
+
+// EdgeType represents the type of relationship between nodes
+type EdgeType string
+
+const (
+        EdgeTypeContact EdgeType = "has_contact"
+        EdgeTypeCall    EdgeType = "call"
+)
+
+// EdgeMetadata is the interface that all edge metadata types must implement
+// This allows for type-safe, extensible edge metadata
+type EdgeMetadata interface {
+        // EdgeType returns the edge type this metadata belongs to
+        EdgeType() EdgeType
+
+        // ToProperties converts metadata to a map for storage
+        ToProperties() map[string]interface{}
+
+        // Validate ensures the metadata is valid
+        Validate() error
+
+        // FromProperties deserializes metadata from a map
+        FromProperties(props map[string]interface{}) error
+}
+
+// Edge represents a relationship between two nodes
+type Edge struct {
+        ID        string       `json:"id"`
+        From      string       `json:"from"` // phone number
+        To        string       `json:"to"`   // phone number
+        Type      EdgeType     `json:"type"`
+        Metadata  EdgeMetadata `json:"-"` // metadata object (not serialized directly)
+        CreatedAt time.Time    `json:"created_at"`
+}
+
+// GetProperties returns the properties map from metadata
+func (e *Edge) GetProperties() map[string]interface{} <span class="cov8" title="1">{
+        if e.Metadata != nil </span><span class="cov8" title="1">{
+                return e.Metadata.ToProperties()
+        }</span>
+        <span class="cov0" title="0">return make(map[string]interface{})</span>
+}
+
+// SetMetadata sets the metadata and updates the edge type
+func (e *Edge) SetMetadata(metadata EdgeMetadata) error <span class="cov8" title="1">{
+        if err := metadata.Validate(); err != nil </span><span class="cov0" title="0">{
+                return err
+        }</span>
+        <span class="cov8" title="1">e.Metadata = metadata
+        e.Type = metadata.EdgeType()
+        return nil</span>
+}
+
+// ContactMetadata represents metadata for contact edges
+type ContactMetadata struct {
+        Name    string    `json:"name"`
+        AddedAt time.Time `json:"added_at"`
+}
+
+// EdgeType implements EdgeMetadata interface
+func (cm *ContactMetadata) EdgeType() EdgeType <span class="cov8" title="1">{
+        return EdgeTypeContact
+}</span>
+
+// ToProperties converts ContactMetadata to a map
+func (cm *ContactMetadata) ToProperties() map[string]interface{} <span class="cov8" title="1">{
+        return map[string]interface{}{
+                "name":     cm.Name,
+                "added_at": cm.AddedAt.Format(time.RFC3339),
+        }
+}</span>
+
+// FromProperties deserializes ContactMetadata from a map
+func (cm *ContactMetadata) FromProperties(props map[string]interface{}) error <span class="cov8" title="1">{
+        if name, ok := props["name"].(string); ok </span><span class="cov8" title="1">{
+                cm.Name = name
+        }</span>
+
+        <span class="cov8" title="1">if addedAtStr, ok := props["added_at"].(string); ok </span><span class="cov8" title="1">{
+                if t, err := time.Parse(time.RFC3339, addedAtStr); err == nil </span><span class="cov8" title="1">{
+                        cm.AddedAt = t
+                }</span> else<span class="cov0" title="0"> {
+                        return fmt.Errorf("invalid added_at format: %w", err)
+                }</span>
+        }
+
+        <span class="cov8" title="1">return nil</span>
+}
+
+// Validate ensures ContactMetadata is valid
+func (cm *ContactMetadata) Validate() error <span class="cov8" title="1">{
+        // Name can be empty for backward compatibility
+        if cm.AddedAt.IsZero() </span><span class="cov8" title="1">{
+                cm.AddedAt = time.Now() // Default to current time if not set
+        }</span>
+        <span class="cov8" title="1">return nil</span>
+}
+
+// CallMetadata represents metadata for call edges
+type CallMetadata struct {
+        IsAnswered        bool      `json:"is_answered"`
+        DurationInSeconds int       `json:"duration_in_seconds"`
+        Timestamp         time.Time `json:"timestamp"`
+}
+
+// EdgeType implements EdgeMetadata interface
+func (cm *CallMetadata) EdgeType() EdgeType <span class="cov8" title="1">{
+        return EdgeTypeCall
+}</span>
+
+// ToProperties converts CallMetadata to a map
+func (cm *CallMetadata) ToProperties() map[string]interface{} <span class="cov8" title="1">{
+        return map[string]interface{}{
+                "is_answered":         cm.IsAnswered,
+                "duration_in_seconds": cm.DurationInSeconds,
+                "timestamp":           cm.Timestamp.Format(time.RFC3339),
+        }
+}</span>
+
+// FromProperties deserializes CallMetadata from a map
+func (cm *CallMetadata) FromProperties(props map[string]interface{}) error <span class="cov8" title="1">{
+        if isAnswered, ok := props["is_answered"].(bool); ok </span><span class="cov8" title="1">{
+                cm.IsAnswered = isAnswered
+        }</span>
+
+        <span class="cov8" title="1">if duration, ok := props["duration_in_seconds"].(int); ok </span><span class="cov8" title="1">{
+                cm.DurationInSeconds = duration
+        }</span> else<span class="cov0" title="0"> if duration, ok := props["duration_in_seconds"].(float64); ok </span><span class="cov0" title="0">{
+                cm.DurationInSeconds = int(duration)
+        }</span>
+
+        <span class="cov8" title="1">if timestampStr, ok := props["timestamp"].(string); ok </span><span class="cov8" title="1">{
+                if t, err := time.Parse(time.RFC3339, timestampStr); err == nil </span><span class="cov8" title="1">{
+                        cm.Timestamp = t
+                }</span>
+        } else<span class="cov0" title="0"> if createdAt, ok := props["created_at"].(string); ok </span><span class="cov0" title="0">{
+                // Backward compatibility with old format
+                if t, err := time.Parse(time.RFC3339, createdAt); err == nil </span><span class="cov0" title="0">{
+                        cm.Timestamp = t
+                }</span>
+        }
+
+        <span class="cov8" title="1">return nil</span>
+}
+
+// Validate ensures CallMetadata is valid
+func (cm *CallMetadata) Validate() error <span class="cov8" title="1">{
+        if cm.DurationInSeconds &lt; 0 </span><span class="cov8" title="1">{
+                return errors.New("call duration cannot be negative")
+        }</span>
+        <span class="cov8" title="1">if cm.Timestamp.IsZero() </span><span class="cov8" title="1">{
+                cm.Timestamp = time.Now() // Default to current time if not set
+        }</span>
+        <span class="cov8" title="1">return nil</span>
+}
+
+// EdgeMetadataRegistry manages registration and deserialization of edge metadata types
+type EdgeMetadataRegistry struct {
+        factories map[EdgeType]func() EdgeMetadata
+}
+
+// NewEdgeMetadataRegistry creates a new registry with default edge types registered
+func NewEdgeMetadataRegistry() *EdgeMetadataRegistry <span class="cov8" title="1">{
+        registry := &amp;EdgeMetadataRegistry{
+                factories: make(map[EdgeType]func() EdgeMetadata),
+        }
+
+        // Register default edge types
+        registry.Register(EdgeTypeContact, func() EdgeMetadata </span><span class="cov8" title="1">{ return &amp;ContactMetadata{} }</span>)
+        <span class="cov8" title="1">registry.Register(EdgeTypeCall, func() EdgeMetadata </span><span class="cov8" title="1">{ return &amp;CallMetadata{} }</span>)
+
+        <span class="cov8" title="1">return registry</span>
+}
+
+// Register registers a factory function for creating edge metadata of a specific type
+func (r *EdgeMetadataRegistry) Register(edgeType EdgeType, factory func() EdgeMetadata) <span class="cov8" title="1">{
+        r.factories[edgeType] = factory
+}</span>
+
+// Deserialize creates and populates edge metadata from properties
+func (r *EdgeMetadataRegistry) Deserialize(edgeType EdgeType, props map[string]interface{}) (EdgeMetadata, error) <span class="cov8" title="1">{
+        factory, exists := r.factories[edgeType]
+        if !exists </span><span class="cov8" title="1">{
+                return nil, fmt.Errorf("unknown edge type: %s", edgeType)
+        }</span>
+
+        <span class="cov8" title="1">metadata := factory()
+        if err := metadata.FromProperties(props); err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("failed to deserialize metadata: %w", err)
+        }</span>
+
+        <span class="cov8" title="1">return metadata, nil</span>
+}
+
+// GetRegisteredTypes returns all registered edge types
+func (r *EdgeMetadataRegistry) GetRegisteredTypes() []EdgeType <span class="cov8" title="1">{
+        types := make([]EdgeType, 0, len(r.factories))
+        for edgeType := range r.factories </span><span class="cov8" title="1">{
+                types = append(types, edgeType)
+        }</span>
+        <span class="cov8" title="1">return types</span>
+}
+
+// EdgeJSON is used for JSON serialization/deserialization
+// It includes properties as a map for storage
+type EdgeJSON struct {
+        ID         string                 `json:"id"`
+        From       string                 `json:"from"`
+        To         string                 `json:"to"`
+        Type       EdgeType               `json:"type"`
+        Properties map[string]interface{} `json:"properties"`
+        CreatedAt  time.Time              `json:"created_at"`
+}
+
+// ToEdge converts EdgeJSON to Edge using the registry
+func (ej *EdgeJSON) ToEdge(registry *EdgeMetadataRegistry) (*Edge, error) <span class="cov8" title="1">{
+        edge := &amp;Edge{
+                ID:        ej.ID,
+                From:      ej.From,
+                To:        ej.To,
+                Type:      ej.Type,
+                CreatedAt: ej.CreatedAt,
+        }
+
+        if len(ej.Properties) &gt; 0 </span><span class="cov8" title="1">{
+                metadata, err := registry.Deserialize(ej.Type, ej.Properties)
+                if err != nil </span><span class="cov0" title="0">{
+                        return nil, err
+                }</span>
+                <span class="cov8" title="1">edge.Metadata = metadata</span>
+        }
+
+        <span class="cov8" title="1">return edge, nil</span>
+}
+
+// FromEdge converts Edge to EdgeJSON
+func (ej *EdgeJSON) FromEdge(edge *Edge) <span class="cov8" title="1">{
+        ej.ID = edge.ID
+        ej.From = edge.From
+        ej.To = edge.To
+        ej.Type = edge.Type
+        ej.CreatedAt = edge.CreatedAt
+        ej.Properties = edge.GetProperties()
+}</span>
+
+// Backward compatibility helpers
+
+// CallProperties is kept for backward compatibility
+type CallProperties struct {
+        IsAnswered        bool `json:"is_answered"`
+        DurationInSeconds int  `json:"duration_in_seconds"`
+}
+
+// ToMap converts CallProperties to map for Edge.Properties
+func (cp *CallProperties) ToMap() map[string]interface{} <span class="cov0" title="0">{
+        return map[string]interface{}{
+                "is_answered":         cp.IsAnswered,
+                "duration_in_seconds": cp.DurationInSeconds,
+        }
+}</span>
+
+// ParseCallProperties extracts call properties from an edge (backward compatibility)
+func ParseCallProperties(properties map[string]interface{}) *CallProperties <span class="cov0" title="0">{
+        cp := &amp;CallProperties{}
+
+        if isAnswered, ok := properties["is_answered"].(bool); ok </span><span class="cov0" title="0">{
+                cp.IsAnswered = isAnswered
+        }</span>
+
+        <span class="cov0" title="0">if duration, ok := properties["duration_in_seconds"].(int); ok </span><span class="cov0" title="0">{
+                cp.DurationInSeconds = duration
+        }</span> else<span class="cov0" title="0"> if duration, ok := properties["duration_in_seconds"].(float64); ok </span><span class="cov0" title="0">{
+                cp.DurationInSeconds = int(duration)
+        }</span>
+
+        <span class="cov0" title="0">return cp</span>
+}
+</pre>
+		
+		<pre class="file" id="file6" style="display: none">package repository
+
+import (
+        "context"
+        "encoding/json"
+        "errors"
+        "fmt"
+        "os"
+        "sync"
+        "time"
+
+        "credCode/models"
+
+        "github.com/cayleygraph/cayley"
+        _ "github.com/cayleygraph/cayley/graph/memstore"
+        "github.com/cayleygraph/quad"
+)
+
+var (
+        ErrNodeNotFound    = errors.New("node not found")
+        ErrEdgeNotFound    = errors.New("edge not found")
+        ErrNodeExists      = errors.New("node already exists")
+        ErrInvalidEdgeType = errors.New("invalid edge type")
+)
+
+// CallFilters defines filters for querying call edges
+type CallFilters struct {
+        IsAnswered     *bool      // filter by answered/unanswered
+        MaxDuration    *int       // maximum duration in seconds
+        MinDuration    *int       // minimum duration in seconds
+        TimeRangeStart *time.Time // start of time range
+        TimeRangeEnd   *time.Time // end of time range
+}
+
+// GraphRepository defines the interface for graph operations
+// It embeds smaller interfaces for backward compatibility while allowing clients
+// to depend only on the interfaces they need (Interface Segregation Principle)
+type GraphRepository interface {
+        // Embed smaller interfaces
+        NodeRepository
+        EdgeRepository
+        QueryRepository
+        SeedDataLoader
+}
+
+// CayleyGraphRepository implements GraphRepository using Cayley
+type CayleyGraphRepository struct {
+        store       *cayley.Handle
+        registry    *models.EdgeMetadataRegistry
+        edgeCounter int
+        mu          sync.RWMutex
+}
+
+// NewCayleyGraphRepository creates a new Cayley-based graph repository
+func NewCayleyGraphRepository() (*CayleyGraphRepository, error) <span class="cov8" title="1">{
+        // Initialize Cayley in-memory store
+        store, err := cayley.NewMemoryGraph()
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("failed to create memory graph: %w", err)
+        }</span>
+
+        <span class="cov8" title="1">return &amp;CayleyGraphRepository{
+                store:       store,
+                registry:    models.NewEdgeMetadataRegistry(),
+                edgeCounter: 0,
+        }, nil</span>
+}
+
+// NewInMemoryGraphRepository creates a new in-memory graph repository (alias for backwards compatibility)
+func NewInMemoryGraphRepository() *CayleyGraphRepository <span class="cov8" title="1">{
+        repo, err := NewCayleyGraphRepository()
+        if err != nil </span><span class="cov0" title="0">{
+                panic(fmt.Sprintf("failed to create graph repository: %v", err))</span>
+        }
+        <span class="cov8" title="1">return repo</span>
+}
+
+// AddNode adds a new node to the graph (backward compatible - without name)
+func (r *CayleyGraphRepository) AddNode(ctx context.Context, phoneNumber string) error <span class="cov8" title="1">{
+        return r.AddNodeWithName(ctx, phoneNumber, "")
+}</span>
+
+// AddNodeWithName adds a new node with name to the graph
+func (r *CayleyGraphRepository) AddNodeWithName(ctx context.Context, phoneNumber, name string) error <span class="cov8" title="1">{
+        r.mu.Lock()
+        defer r.mu.Unlock()
+
+        // Check if node already exists
+        if r.nodeExistsUnsafe(phoneNumber) </span><span class="cov8" title="1">{
+                return ErrNodeExists
+        }</span>
+
+        // Add node as a quad: phoneNumber -&gt; type -&gt; "node"
+        <span class="cov8" title="1">r.store.AddQuad(quad.Make(phoneNumber, "type", "node", nil))
+
+        // Add name if provided
+        if name != "" </span><span class="cov8" title="1">{
+                r.store.AddQuad(quad.Make(phoneNumber, "name", name, nil))
+        }</span>
+
+        <span class="cov8" title="1">return nil</span>
+}
+
+// GetNode retrieves a node by phone number
+func (r *CayleyGraphRepository) GetNode(ctx context.Context, phoneNumber string) (*models.Node, error) <span class="cov8" title="1">{
+        r.mu.RLock()
+        defer r.mu.RUnlock()
+
+        if !r.nodeExistsUnsafe(phoneNumber) </span><span class="cov8" title="1">{
+                return nil, ErrNodeNotFound
+        }</span>
+
+        <span class="cov8" title="1">node := &amp;models.Node{
+                PhoneNumber: phoneNumber,
+        }
+
+        // Get name if it exists
+        namePath := cayley.StartPath(r.store, quad.String(phoneNumber)).Out(quad.String("name"))
+        nameIt, _ := namePath.BuildIterator().Optimize()
+        if nameIt.Next(ctx) </span><span class="cov8" title="1">{
+                token := nameIt.Result()
+                node.Name = quad.ToString(r.store.NameOf(token))
+        }</span>
+        <span class="cov8" title="1">nameIt.Close()
+
+        return node, nil</span>
+}
+
+// NodeExists checks if a node exists
+func (r *CayleyGraphRepository) NodeExists(ctx context.Context, phoneNumber string) bool <span class="cov8" title="1">{
+        r.mu.RLock()
+        defer r.mu.RUnlock()
+        return r.nodeExistsUnsafe(phoneNumber)
+}</span>
+
+// nodeExistsUnsafe checks if a node exists (must be called with lock held)
+func (r *CayleyGraphRepository) nodeExistsUnsafe(phoneNumber string) bool <span class="cov8" title="1">{
+        p := cayley.StartPath(r.store, quad.String(phoneNumber)).Out(quad.String("type"))
+        ctx := context.TODO()
+
+        it, _ := p.BuildIterator().Optimize()
+        defer it.Close()
+
+        return it.Next(ctx)
+}</span>
+
+// GetAllNodes retrieves all nodes
+func (r *CayleyGraphRepository) GetAllNodes(ctx context.Context) ([]*models.Node, error) <span class="cov8" title="1">{
+        r.mu.RLock()
+        defer r.mu.RUnlock()
+
+        nodes := make([]*models.Node, 0)
+
+        // Find all subjects that have type "node"
+        p := cayley.StartPath(r.store).Has(quad.String("type"), quad.String("node"))
+
+        it, _ := p.BuildIterator().Optimize()
+        defer it.Close()
+
+        for it.Next(ctx) </span><span class="cov8" title="1">{
+                token := it.Result()
+                phoneNumber := quad.ToString(r.store.NameOf(token))
+
+                node := &amp;models.Node{
+                        PhoneNumber: phoneNumber,
+                }
+
+                // Get name if it exists
+                namePath := cayley.StartPath(r.store, quad.String(phoneNumber)).Out(quad.String("name"))
+                nameIt, _ := namePath.BuildIterator().Optimize()
+                if nameIt.Next(ctx) </span><span class="cov8" title="1">{
+                        nameToken := nameIt.Result()
+                        node.Name = quad.ToString(r.store.NameOf(nameToken))
+                }</span>
+                <span class="cov8" title="1">nameIt.Close()
+
+                nodes = append(nodes, node)</span>
+        }
+
+        <span class="cov8" title="1">if err := it.Err(); err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("failed to iterate nodes: %w", err)
+        }</span>
+
+        <span class="cov8" title="1">return nodes, nil</span>
+}
+
+// DeleteNode removes a node and all its edges
+func (r *CayleyGraphRepository) DeleteNode(ctx context.Context, phoneNumber string) error <span class="cov8" title="1">{
+        r.mu.Lock()
+        defer r.mu.Unlock()
+
+        if !r.nodeExistsUnsafe(phoneNumber) </span><span class="cov8" title="1">{
+                return ErrNodeNotFound
+        }</span>
+
+        // Delete all quads where this phone number is subject or object
+        <span class="cov8" title="1">quadsToDelete := make([]*quad.Quad, 0)
+
+        it := r.store.QuadsAllIterator()
+        defer it.Close()
+
+        for it.Next(ctx) </span><span class="cov8" title="1">{
+                q := r.store.Quad(it.Result())
+                subject := quad.ToString(q.Subject)
+                object := quad.ToString(q.Object)
+
+                if subject == phoneNumber || object == phoneNumber </span><span class="cov8" title="1">{
+                        quadsToDelete = append(quadsToDelete, &amp;q)
+                }</span>
+        }
+
+        // Delete all found quads
+        <span class="cov8" title="1">for _, q := range quadsToDelete </span><span class="cov8" title="1">{
+                if err := r.store.RemoveQuad(*q); err != nil </span><span class="cov0" title="0">{
+                        return fmt.Errorf("failed to remove quad: %w", err)
+                }</span>
+        }
+
+        <span class="cov8" title="1">return nil</span>
+}
+
+// AddContactEdge adds a bidirectional contact edge between two phone numbers (backward compatible)
+func (r *CayleyGraphRepository) AddContactEdge(phone1, phone2 string) error <span class="cov0" title="0">{
+        // Use default metadata
+        metadata := &amp;models.ContactMetadata{
+                Name:    "", // Empty name for backward compatibility
+                AddedAt: time.Now(),
+        }
+
+        // Add edge in both directions
+        ctx := context.Background()
+        _, err := r.AddEdgeWithMetadata(ctx, phone1, phone2, metadata)
+        if err != nil </span><span class="cov0" title="0">{
+                return err
+        }</span>
+
+        <span class="cov0" title="0">return err</span>
+}
+
+// AddContactEdgeWithMetadata adds a contact edge with full metadata
+func (r *CayleyGraphRepository) AddContactEdgeWithMetadata(phone1, phone2 string, name string, addedAt time.Time) error <span class="cov0" title="0">{
+        metadata := &amp;models.ContactMetadata{
+                Name:    name,
+                AddedAt: addedAt,
+        }
+
+        // Add edge in both directions
+        ctx := context.Background()
+        _, err := r.AddEdgeWithMetadata(ctx, phone1, phone2, metadata)
+        if err != nil </span><span class="cov0" title="0">{
+                return err
+        }</span>
+
+        <span class="cov0" title="0">return err</span>
+}
+
+// AddCallEdge adds a directional call edge (backward compatible)
+func (r *CayleyGraphRepository) AddCallEdge(from, to string, isAnswered bool, duration int, timestamp time.Time) (*models.Edge, error) <span class="cov0" title="0">{
+        metadata := &amp;models.CallMetadata{
+                IsAnswered:        isAnswered,
+                DurationInSeconds: duration,
+                Timestamp:         timestamp,
+        }
+
+        ctx := context.Background()
+        return r.AddEdgeWithMetadata(ctx, from, to, metadata)
+}</span>
+
+// AddEdgeWithMetadata is the generic method to add any edge with metadata
+func (r *CayleyGraphRepository) AddEdgeWithMetadata(ctx context.Context, from, to string, metadata models.EdgeMetadata) (*models.Edge, error) <span class="cov8" title="1">{
+        r.mu.Lock()
+        defer r.mu.Unlock()
+
+        // Validate metadata
+        if err := metadata.Validate(); err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("invalid metadata: %w", err)
+        }</span>
+
+        // Ensure both nodes exist
+        <span class="cov8" title="1">if !r.nodeExistsUnsafe(from) </span><span class="cov0" title="0">{
+                r.store.AddQuad(quad.Make(from, "type", "node", nil))
+        }</span>
+        <span class="cov8" title="1">if !r.nodeExistsUnsafe(to) </span><span class="cov0" title="0">{
+                r.store.AddQuad(quad.Make(to, "type", "node", nil))
+        }</span>
+
+        <span class="cov8" title="1">properties := metadata.ToProperties()
+
+        // Generate unique edge ID
+        r.edgeCounter++
+        edgeID := fmt.Sprintf("%s_%d", metadata.EdgeType(), r.edgeCounter)
+
+        // Store edge based on type
+        if metadata.EdgeType() == models.EdgeTypeContact </span><span class="cov8" title="1">{
+                // Contact edges are stored directly: from -&gt; has_contact -&gt; to
+                r.store.AddQuad(quad.Make(from, "has_contact", to, nil))
+
+                // Store metadata as properties on the edge
+                if name, ok := properties["name"].(string); ok &amp;&amp; name != "" </span><span class="cov8" title="1">{
+                        // Store contact name: from -&gt; contact_name_to -&gt; name
+                        contactKey := fmt.Sprintf("%s_contact_%s", from, to)
+                        r.store.AddQuad(quad.Make(contactKey, "name", name, nil))
+                        r.store.AddQuad(quad.Make(contactKey, "from", from, nil))
+                        r.store.AddQuad(quad.Make(contactKey, "to", to, nil))
+                }</span>
+                <span class="cov8" title="1">if addedAt, ok := properties["added_at"].(string); ok </span><span class="cov8" title="1">{
+                        contactKey := fmt.Sprintf("%s_contact_%s", from, to)
+                        r.store.AddQuad(quad.Make(contactKey, "added_at", addedAt, nil))
+                }</span>
+        } else<span class="cov8" title="1"> if metadata.EdgeType() == models.EdgeTypeCall </span><span class="cov8" title="1">{
+                // Call edges are stored with an ID: call_id -&gt; type -&gt; "call"
+                r.store.AddQuad(quad.Make(edgeID, "type", "call", nil))
+                r.store.AddQuad(quad.Make(edgeID, "from", from, nil))
+                r.store.AddQuad(quad.Make(edgeID, "to", to, nil))
+
+                // Store all metadata properties
+                for key, value := range properties </span><span class="cov8" title="1">{
+                        r.store.AddQuad(quad.Make(edgeID, key, value, nil))
+                }</span>
+        }
+
+        // Create edge object
+        <span class="cov8" title="1">edge := &amp;models.Edge{
+                ID:        edgeID,
+                From:      from,
+                To:        to,
+                Type:      metadata.EdgeType(),
+                Metadata:  metadata,
+                CreatedAt: time.Now(),
+        }
+
+        // Set CreatedAt from metadata if available
+        if callMeta, ok := metadata.(*models.CallMetadata); ok </span><span class="cov8" title="1">{
+                edge.CreatedAt = callMeta.Timestamp
+        }</span> else<span class="cov8" title="1"> if contactMeta, ok := metadata.(*models.ContactMetadata); ok </span><span class="cov8" title="1">{
+                edge.CreatedAt = contactMeta.AddedAt
+        }</span>
+
+        <span class="cov8" title="1">return edge, nil</span>
+}
+
+// GetEdge retrieves an edge by ID (backward compatible - returns edge with properties map)
+func (r *CayleyGraphRepository) GetEdge(ctx context.Context, edgeID string) (*models.Edge, error) <span class="cov8" title="1">{
+        edge, _, err := r.GetEdgeWithMetadata(ctx, edgeID)
+        return edge, err
+}</span>
+
+// GetEdgeWithMetadata retrieves an edge with its metadata
+func (r *CayleyGraphRepository) GetEdgeWithMetadata(ctx context.Context, edgeID string) (*models.Edge, models.EdgeMetadata, error) <span class="cov8" title="1">{
+        r.mu.RLock()
+        defer r.mu.RUnlock()
+
+        // Check if edge exists and get its type
+        typePath := cayley.StartPath(r.store, quad.String(edgeID)).Out(quad.String("type"))
+        typeIt, _ := typePath.BuildIterator().Optimize()
+        defer typeIt.Close()
+
+        if !typeIt.Next(ctx) </span><span class="cov8" title="1">{
+                // Try to find contact edge by checking if it's a contact metadata key
+                return r.getContactEdgeByKey(edgeID)
+        }</span>
+
+        <span class="cov8" title="1">token := typeIt.Result()
+        edgeTypeStr := quad.ToString(r.store.NameOf(token))
+
+        if edgeTypeStr == "call" </span><span class="cov8" title="1">{
+                return r.getCallEdgeWithMetadataUnsafe(edgeID)
+        }</span>
+
+        <span class="cov0" title="0">return nil, nil, ErrEdgeNotFound</span>
+}
+
+// getContactEdgeByKey retrieves a contact edge by its metadata key
+func (r *CayleyGraphRepository) getContactEdgeByKey(key string) (*models.Edge, models.EdgeMetadata, error) <span class="cov8" title="1">{
+        ctx := context.TODO()
+
+        // Check if this is a contact metadata key
+        fromPath := cayley.StartPath(r.store, quad.String(key)).Out(quad.String("from"))
+        fromIt, _ := fromPath.BuildIterator().Optimize()
+        if !fromIt.Next(ctx) </span><span class="cov8" title="1">{
+                fromIt.Close()
+                return nil, nil, ErrEdgeNotFound
+        }</span>
+
+        <span class="cov0" title="0">fromToken := fromIt.Result()
+        from := quad.ToString(r.store.NameOf(fromToken))
+        fromIt.Close()
+
+        toPath := cayley.StartPath(r.store, quad.String(key)).Out(quad.String("to"))
+        toIt, _ := toPath.BuildIterator().Optimize()
+        if !toIt.Next(ctx) </span><span class="cov0" title="0">{
+                toIt.Close()
+                return nil, nil, ErrEdgeNotFound
+        }</span>
+
+        <span class="cov0" title="0">toToken := toIt.Result()
+        to := quad.ToString(r.store.NameOf(toToken))
+        toIt.Close()
+
+        // Get name
+        name := ""
+        namePath := cayley.StartPath(r.store, quad.String(key)).Out(quad.String("name"))
+        nameIt, _ := namePath.BuildIterator().Optimize()
+        if nameIt.Next(ctx) </span><span class="cov0" title="0">{
+                nameToken := nameIt.Result()
+                name = quad.ToString(r.store.NameOf(nameToken))
+        }</span>
+        <span class="cov0" title="0">nameIt.Close()
+
+        // Get added_at
+        addedAt := time.Now()
+        addedAtPath := cayley.StartPath(r.store, quad.String(key)).Out(quad.String("added_at"))
+        addedAtIt, _ := addedAtPath.BuildIterator().Optimize()
+        if addedAtIt.Next(ctx) </span><span class="cov0" title="0">{
+                addedAtToken := addedAtIt.Result()
+                addedAtStr := quad.ToString(r.store.NameOf(addedAtToken))
+                if t, err := time.Parse(time.RFC3339, addedAtStr); err == nil </span><span class="cov0" title="0">{
+                        addedAt = t
+                }</span>
+        }
+        <span class="cov0" title="0">addedAtIt.Close()
+
+        metadata := &amp;models.ContactMetadata{
+                Name:    name,
+                AddedAt: addedAt,
+        }
+
+        edge := &amp;models.Edge{
+                ID:        key,
+                From:      from,
+                To:        to,
+                Type:      models.EdgeTypeContact,
+                Metadata:  metadata,
+                CreatedAt: addedAt,
+        }
+
+        return edge, metadata, nil</span>
+}
+
+// getCallEdgeWithMetadataUnsafe retrieves a call edge with metadata (must be called with lock held)
+func (r *CayleyGraphRepository) getCallEdgeWithMetadataUnsafe(callID string) (*models.Edge, models.EdgeMetadata, error) <span class="cov8" title="1">{
+        ctx := context.TODO()
+
+        edge := &amp;models.Edge{
+                ID:   callID,
+                Type: models.EdgeTypeCall,
+        }
+
+        properties := make(map[string]interface{})
+
+        // Get "from" phone
+        fromPath := cayley.StartPath(r.store, quad.String(callID)).Out(quad.String("from"))
+        fromIt, _ := fromPath.BuildIterator().Optimize()
+        if fromIt.Next(ctx) </span><span class="cov8" title="1">{
+                token := fromIt.Result()
+                edge.From = quad.ToString(r.store.NameOf(token))
+        }</span>
+        <span class="cov8" title="1">fromIt.Close()
+
+        // Get "to" phone
+        toPath := cayley.StartPath(r.store, quad.String(callID)).Out(quad.String("to"))
+        toIt, _ := toPath.BuildIterator().Optimize()
+        if toIt.Next(ctx) </span><span class="cov8" title="1">{
+                token := toIt.Result()
+                edge.To = quad.ToString(r.store.NameOf(token))
+        }</span>
+        <span class="cov8" title="1">toIt.Close()
+
+        // Get all properties
+        propertyPredicates := []string{"is_answered", "duration_in_seconds", "timestamp", "created_at"}
+        for _, pred := range propertyPredicates </span><span class="cov8" title="1">{
+                propPath := cayley.StartPath(r.store, quad.String(callID)).Out(quad.String(pred))
+                propIt, _ := propPath.BuildIterator().Optimize()
+                if propIt.Next(ctx) </span><span class="cov8" title="1">{
+                        token := propIt.Result()
+                        val := r.store.NameOf(token)
+                        nativeVal := quad.NativeOf(val)
+
+                        // Map property names
+                        if pred == "duration_in_seconds" </span><span class="cov8" title="1">{
+                                if intVal, ok := nativeVal.(int); ok </span><span class="cov0" title="0">{
+                                        properties["duration_in_seconds"] = intVal
+                                }</span> else<span class="cov8" title="1"> if int64Val, ok := nativeVal.(int64); ok </span><span class="cov8" title="1">{
+                                        properties["duration_in_seconds"] = int(int64Val)
+                                }</span>
+                        } else<span class="cov8" title="1"> if pred == "is_answered" </span><span class="cov8" title="1">{
+                                if boolVal, ok := nativeVal.(bool); ok </span><span class="cov8" title="1">{
+                                        properties["is_answered"] = boolVal
+                                }</span>
+                        } else<span class="cov8" title="1"> if pred == "timestamp" || pred == "created_at" </span><span class="cov8" title="1">{
+                                if timeStr, ok := nativeVal.(string); ok </span><span class="cov8" title="1">{
+                                        properties["timestamp"] = timeStr
+                                        if t, err := time.Parse(time.RFC3339, timeStr); err == nil </span><span class="cov8" title="1">{
+                                                edge.CreatedAt = t
+                                        }</span>
+                                }
+                        }
+                }
+                <span class="cov8" title="1">propIt.Close()</span>
+        }
+
+        // Deserialize metadata
+        <span class="cov8" title="1">metadata, err := r.registry.Deserialize(models.EdgeTypeCall, properties)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, nil, fmt.Errorf("failed to deserialize call metadata: %w", err)
+        }</span>
+
+        <span class="cov8" title="1">edge.Metadata = metadata
+        return edge, metadata, nil</span>
+}
+
+// DeleteEdge removes an edge from the graph
+func (r *CayleyGraphRepository) DeleteEdge(ctx context.Context, edgeID string) error <span class="cov0" title="0">{
+        r.mu.Lock()
+        defer r.mu.Unlock()
+
+        // Find and delete all quads related to this edge
+        it := r.store.QuadsAllIterator()
+        defer it.Close()
+
+        quadsToDelete := make([]*quad.Quad, 0)
+
+        for it.Next(ctx) </span><span class="cov0" title="0">{
+                q := r.store.Quad(it.Result())
+                subject := quad.ToString(q.Subject)
+
+                if subject == edgeID </span><span class="cov0" title="0">{
+                        quadsToDelete = append(quadsToDelete, &amp;q)
+                }</span>
+        }
+
+        <span class="cov0" title="0">if len(quadsToDelete) == 0 </span><span class="cov0" title="0">{
+                return ErrEdgeNotFound
+        }</span>
+
+        <span class="cov0" title="0">for _, q := range quadsToDelete </span><span class="cov0" title="0">{
+                if err := r.store.RemoveQuad(*q); err != nil </span><span class="cov0" title="0">{
+                        return fmt.Errorf("failed to remove quad: %w", err)
+                }</span>
+        }
+
+        <span class="cov0" title="0">return nil</span>
+}
+
+// GetUsersWithContact returns all phone numbers that have the given phone number in their contacts
+// Query 1: Give me count or all the users who have saved a phone number in their contact list
+func (r *CayleyGraphRepository) GetUsersWithContact(ctx context.Context, phoneNumber string) ([]string, int) <span class="cov8" title="1">{
+        r.mu.RLock()
+        defer r.mu.RUnlock()
+        users := make([]string, 0)
+
+        // Find all phone numbers that have has_contact edge pointing to this phoneNumber
+        // This is: ? -has_contact-&gt; phoneNumber
+        p := cayley.StartPath(r.store, quad.String(phoneNumber)).In(quad.String("has_contact"))
+
+        it, _ := p.BuildIterator().Optimize()
+        defer it.Close()
+
+        for it.Next(ctx) </span><span class="cov8" title="1">{
+                token := it.Result()
+                user := quad.ToString(r.store.NameOf(token))
+                users = append(users, user)
+        }</span>
+
+        <span class="cov8" title="1">return users, len(users)</span>
+}
+
+// GetOutgoingEdges returns all outgoing edges of a specific type from a phone number
+func (r *CayleyGraphRepository) GetOutgoingEdges(ctx context.Context, phoneNumber string, edgeType models.EdgeType) []*models.Edge <span class="cov8" title="1">{
+        r.mu.RLock()
+        defer r.mu.RUnlock()
+
+        edges := make([]*models.Edge, 0)
+
+        if edgeType == models.EdgeTypeContact </span><span class="cov8" title="1">{
+                // Find all: phoneNumber -has_contact-&gt; ?
+                p := cayley.StartPath(r.store, quad.String(phoneNumber)).Out(quad.String("has_contact"))
+                it, _ := p.BuildIterator().Optimize()
+                defer it.Close()
+
+                for it.Next(ctx) </span><span class="cov8" title="1">{
+                        token := it.Result()
+                        toPhone := quad.ToString(r.store.NameOf(token))
+
+                        // Try to get metadata
+                        contactKey := fmt.Sprintf("%s_contact_%s", phoneNumber, toPhone)
+                        edge := &amp;models.Edge{
+                                From: phoneNumber,
+                                To:   toPhone,
+                                Type: models.EdgeTypeContact,
+                        }
+
+                        // Get metadata if available
+                        namePath := cayley.StartPath(r.store, quad.String(contactKey)).Out(quad.String("name"))
+                        nameIt, _ := namePath.BuildIterator().Optimize()
+                        if nameIt.Next(ctx) </span><span class="cov8" title="1">{
+                                nameToken := nameIt.Result()
+                                name := quad.ToString(r.store.NameOf(nameToken))
+                                addedAt := time.Now()
+
+                                addedAtPath := cayley.StartPath(r.store, quad.String(contactKey)).Out(quad.String("added_at"))
+                                addedAtIt, _ := addedAtPath.BuildIterator().Optimize()
+                                if addedAtIt.Next(ctx) </span><span class="cov8" title="1">{
+                                        addedAtToken := addedAtIt.Result()
+                                        addedAtStr := quad.ToString(r.store.NameOf(addedAtToken))
+                                        if t, err := time.Parse(time.RFC3339, addedAtStr); err == nil </span><span class="cov8" title="1">{
+                                                addedAt = t
+                                        }</span>
+                                }
+                                <span class="cov8" title="1">addedAtIt.Close()
+
+                                metadata := &amp;models.ContactMetadata{
+                                        Name:    name,
+                                        AddedAt: addedAt,
+                                }
+                                edge.Metadata = metadata
+                                edge.CreatedAt = addedAt</span>
+                        }
+                        <span class="cov8" title="1">nameIt.Close()
+
+                        edges = append(edges, edge)</span>
+                }
+        } else<span class="cov0" title="0"> if edgeType == models.EdgeTypeCall </span><span class="cov0" title="0">{
+                // Find all calls where from = phoneNumber
+                edges = r.getCallsByPhoneUnsafe(phoneNumber, "from")
+        }</span>
+
+        <span class="cov8" title="1">return edges</span>
+}
+
+// GetIncomingEdges returns all incoming edges of a specific type to a phone number
+func (r *CayleyGraphRepository) GetIncomingEdges(ctx context.Context, phoneNumber string, edgeType models.EdgeType) []*models.Edge <span class="cov8" title="1">{
+        r.mu.RLock()
+        defer r.mu.RUnlock()
+
+        edges := make([]*models.Edge, 0)
+
+        if edgeType == models.EdgeTypeContact </span><span class="cov8" title="1">{
+                // Find all: ? -has_contact-&gt; phoneNumber
+                p := cayley.StartPath(r.store, quad.String(phoneNumber)).In(quad.String("has_contact"))
+                it, _ := p.BuildIterator().Optimize()
+                defer it.Close()
+
+                for it.Next(ctx) </span><span class="cov8" title="1">{
+                        token := it.Result()
+                        fromPhone := quad.ToString(r.store.NameOf(token))
+
+                        edge := &amp;models.Edge{
+                                From: fromPhone,
+                                To:   phoneNumber,
+                                Type: models.EdgeTypeContact,
+                        }
+
+                        // Try to get metadata
+                        contactKey := fmt.Sprintf("%s_contact_%s", fromPhone, phoneNumber)
+                        namePath := cayley.StartPath(r.store, quad.String(contactKey)).Out(quad.String("name"))
+                        nameIt, _ := namePath.BuildIterator().Optimize()
+                        if nameIt.Next(ctx) </span><span class="cov8" title="1">{
+                                nameToken := nameIt.Result()
+                                name := quad.ToString(r.store.NameOf(nameToken))
+                                addedAt := time.Now()
+
+                                addedAtPath := cayley.StartPath(r.store, quad.String(contactKey)).Out(quad.String("added_at"))
+                                addedAtIt, _ := addedAtPath.BuildIterator().Optimize()
+                                if addedAtIt.Next(ctx) </span><span class="cov8" title="1">{
+                                        addedAtToken := addedAtIt.Result()
+                                        addedAtStr := quad.ToString(r.store.NameOf(addedAtToken))
+                                        if t, err := time.Parse(time.RFC3339, addedAtStr); err == nil </span><span class="cov8" title="1">{
+                                                addedAt = t
+                                        }</span>
+                                }
+                                <span class="cov8" title="1">addedAtIt.Close()
+
+                                metadata := &amp;models.ContactMetadata{
+                                        Name:    name,
+                                        AddedAt: addedAt,
+                                }
+                                edge.Metadata = metadata
+                                edge.CreatedAt = addedAt</span>
+                        }
+                        <span class="cov8" title="1">nameIt.Close()
+
+                        edges = append(edges, edge)</span>
+                }
+        } else<span class="cov0" title="0"> if edgeType == models.EdgeTypeCall </span><span class="cov0" title="0">{
+                // Find all calls where to = phoneNumber
+                edges = r.getCallsByPhoneUnsafe(phoneNumber, "to")
+        }</span>
+
+        <span class="cov8" title="1">return edges</span>
+}
+
+// getCallsByPhoneUnsafe retrieves call edges by phone number (must be called with lock held)
+func (r *CayleyGraphRepository) getCallsByPhoneUnsafe(phoneNumber, direction string) []*models.Edge <span class="cov8" title="1">{
+        ctx := context.TODO()
+        edges := make([]*models.Edge, 0)
+
+        // Find all call IDs where direction = phoneNumber
+        p := cayley.StartPath(r.store, quad.String(phoneNumber)).In(quad.String(direction)).Has(quad.String("type"), quad.String("call"))
+
+        it, _ := p.BuildIterator().Optimize()
+        defer it.Close()
+
+        for it.Next(ctx) </span><span class="cov8" title="1">{
+                token := it.Result()
+                callID := quad.ToString(r.store.NameOf(token))
+                if edge, _, err := r.getCallEdgeWithMetadataUnsafe(callID); err == nil </span><span class="cov8" title="1">{
+                        edges = append(edges, edge)
+                }</span>
+        }
+
+        <span class="cov8" title="1">return edges</span>
+}
+
+// GetCallsWithFilters returns call edges with applied filters
+// Query 2: How many calls a phone number is making with filters
+// direction: "outgoing", "incoming", or "both"
+func (r *CayleyGraphRepository) GetCallsWithFilters(ctx context.Context, phoneNumber string, filters CallFilters, direction string) ([]*models.Edge, int) <span class="cov8" title="1">{
+        r.mu.RLock()
+        defer r.mu.RUnlock()
+
+        var candidateEdges []*models.Edge
+
+        // Gather candidate edges based on direction
+        switch direction </span>{
+        case "outgoing":<span class="cov8" title="1">
+                candidateEdges = r.getCallsByPhoneUnsafe(phoneNumber, "from")</span>
+        case "incoming":<span class="cov0" title="0">
+                candidateEdges = r.getCallsByPhoneUnsafe(phoneNumber, "to")</span>
+        case "both":<span class="cov0" title="0">
+                candidateEdges = append(
+                        r.getCallsByPhoneUnsafe(phoneNumber, "from"),
+                        r.getCallsByPhoneUnsafe(phoneNumber, "to")...,
+                )</span>
+        default:<span class="cov0" title="0">
+                candidateEdges = r.getCallsByPhoneUnsafe(phoneNumber, "from")</span>
+        }
+
+        // Apply filters
+        <span class="cov8" title="1">filteredEdges := make([]*models.Edge, 0)
+        for _, edge := range candidateEdges </span><span class="cov8" title="1">{
+                if r.matchesCallFilters(edge, filters) </span><span class="cov8" title="1">{
+                        filteredEdges = append(filteredEdges, edge)
+                }</span>
+        }
+
+        <span class="cov8" title="1">return filteredEdges, len(filteredEdges)</span>
+}
+
+// matchesCallFilters checks if an edge matches the given call filters
+func (r *CayleyGraphRepository) matchesCallFilters(edge *models.Edge, filters CallFilters) bool <span class="cov8" title="1">{
+        if edge.Type != models.EdgeTypeCall </span><span class="cov0" title="0">{
+                return false
+        }</span>
+
+        // Use metadata if available, otherwise fall back to properties
+        <span class="cov8" title="1">var callMeta *models.CallMetadata
+        if edge.Metadata != nil </span><span class="cov8" title="1">{
+                if cm, ok := edge.Metadata.(*models.CallMetadata); ok </span><span class="cov8" title="1">{
+                        callMeta = cm
+                }</span>
+        }
+
+        // Fallback to parsing properties for backward compatibility
+        <span class="cov8" title="1">if callMeta == nil </span><span class="cov0" title="0">{
+                props := edge.GetProperties()
+                if meta, err := r.registry.Deserialize(models.EdgeTypeCall, props); err == nil </span><span class="cov0" title="0">{
+                        if cm, ok := meta.(*models.CallMetadata); ok </span><span class="cov0" title="0">{
+                                callMeta = cm
+                        }</span>
+                }
+        }
+
+        <span class="cov8" title="1">if callMeta == nil </span><span class="cov0" title="0">{
+                return false
+        }</span>
+
+        // Filter by IsAnswered
+        <span class="cov8" title="1">if filters.IsAnswered != nil &amp;&amp; callMeta.IsAnswered != *filters.IsAnswered </span><span class="cov8" title="1">{
+                return false
+        }</span>
+
+        // Filter by MaxDuration
+        <span class="cov8" title="1">if filters.MaxDuration != nil &amp;&amp; callMeta.DurationInSeconds &gt; *filters.MaxDuration </span><span class="cov8" title="1">{
+                return false
+        }</span>
+
+        // Filter by MinDuration
+        <span class="cov8" title="1">if filters.MinDuration != nil &amp;&amp; callMeta.DurationInSeconds &lt; *filters.MinDuration </span><span class="cov0" title="0">{
+                return false
+        }</span>
+
+        // Filter by TimeRangeStart
+        <span class="cov8" title="1">if filters.TimeRangeStart != nil &amp;&amp; edge.CreatedAt.Before(*filters.TimeRangeStart) </span><span class="cov0" title="0">{
+                return false
+        }</span>
+
+        // Filter by TimeRangeEnd
+        <span class="cov8" title="1">if filters.TimeRangeEnd != nil &amp;&amp; edge.CreatedAt.After(*filters.TimeRangeEnd) </span><span class="cov0" title="0">{
+                return false
+        }</span>
+
+        <span class="cov8" title="1">return true</span>
+}
+
+// IsDirectContact checks if callerPhone is in userPhone's direct contacts (level 1)
+// Uses Cayley path query: userPhone -has_contact-&gt; callerPhone
+func (r *CayleyGraphRepository) IsDirectContact(ctx context.Context, userPhone, callerPhone string) bool <span class="cov8" title="1">{
+        r.mu.RLock()
+        defer r.mu.RUnlock()
+
+        // Query: userPhone -has_contact-&gt; callerPhone
+        p := cayley.StartPath(r.store, quad.String(userPhone)).
+                Out(quad.String("has_contact")).
+                Is(quad.String(callerPhone))
+
+        it, _ := p.BuildIterator().Optimize()
+        defer it.Close()
+
+        return it.Next(ctx)
+}</span>
+
+// GetSecondLevelContactCount counts how many of userPhone's contacts have callerPhone in their contacts
+// Uses Cayley path query: userPhone -has_contact-&gt; ? -has_contact-&gt; callerPhone
+// Returns the count of unique intermediate contacts (level 2 matches)
+func (r *CayleyGraphRepository) GetSecondLevelContactCount(ctx context.Context, userPhone, callerPhone string) int <span class="cov8" title="1">{
+        r.mu.RLock()
+        defer r.mu.RUnlock()
+
+        // Query: Find all paths: userPhone -has_contact-&gt; intermediate -has_contact-&gt; callerPhone
+        // We traverse: userPhone -&gt; Out("has_contact") -&gt; Out("has_contact") -&gt; Is(callerPhone)
+        // This finds all intermediate contacts that have callerPhone
+        p := cayley.StartPath(r.store, quad.String(userPhone)).
+                Out(quad.String("has_contact")).
+                Out(quad.String("has_contact")).
+                Is(quad.String(callerPhone))
+
+        it, _ := p.BuildIterator().Optimize()
+        defer it.Close()
+
+        // Count unique intermediate contacts
+        // We need to get the intermediate node (one hop from userPhone)
+        // So we need to track: userPhone -&gt; contact -&gt; callerPhone
+        // The intermediate contact is what we want to count
+
+        // Alternative approach: Get all contacts of userPhone, then check each
+        // But we can use a more efficient query by getting the path and extracting intermediate nodes
+
+        // Actually, to count unique intermediates, we need to:
+        // 1. Get all contacts of userPhone
+        // 2. For each, check if they have callerPhone
+        // But we can optimize with Cayley by using a different approach
+
+        // Let's use: Get all contacts of userPhone, then check which ones have callerPhone
+        contactsPath := cayley.StartPath(r.store, quad.String(userPhone)).Out(quad.String("has_contact"))
+        contactsIt, _ := contactsPath.BuildIterator().Optimize()
+        defer contactsIt.Close()
+
+        count := 0
+        checkedContacts := make(map[string]bool)
+
+        for contactsIt.Next(ctx) </span><span class="cov8" title="1">{
+                contactToken := contactsIt.Result()
+                contactPhone := quad.ToString(r.store.NameOf(contactToken))
+
+                // Skip if already checked
+                if checkedContacts[contactPhone] </span><span class="cov0" title="0">{
+                        continue</span>
+                }
+                <span class="cov8" title="1">checkedContacts[contactPhone] = true
+
+                // Check if this contact has callerPhone: contactPhone -has_contact-&gt; callerPhone
+                hasCallerPath := cayley.StartPath(r.store, quad.String(contactPhone)).
+                        Out(quad.String("has_contact")).
+                        Is(quad.String(callerPhone))
+
+                hasCallerIt, _ := hasCallerPath.BuildIterator().Optimize()
+                if hasCallerIt.Next(ctx) </span><span class="cov8" title="1">{
+                        count++
+                }</span>
+                <span class="cov8" title="1">hasCallerIt.Close()</span>
+        }
+
+        <span class="cov8" title="1">return count</span>
+}
+
+// LoadSeedData loads graph seed data from a JSON file
+func (r *CayleyGraphRepository) LoadSeedData(ctx context.Context, filePath string) error <span class="cov0" title="0">{
+        r.mu.Lock()
+        defer r.mu.Unlock()
+
+        // Read the JSON file
+        data, err := os.ReadFile(filePath)
+        if err != nil </span><span class="cov0" title="0">{
+                return err
+        }</span>
+
+        // Parse the JSON using EdgeJSON format
+        <span class="cov0" title="0">var seedData struct {
+                Nodes []*models.Node     `json:"nodes"`
+                Edges []*models.EdgeJSON `json:"edges"`
+        }
+
+        if err := json.Unmarshal(data, &amp;seedData); err != nil </span><span class="cov0" title="0">{
+                return err
+        }</span>
+
+        // Load nodes
+        <span class="cov0" title="0">for _, node := range seedData.Nodes </span><span class="cov0" title="0">{
+                if !r.nodeExistsUnsafe(node.PhoneNumber) </span><span class="cov0" title="0">{
+                        r.store.AddQuad(quad.Make(node.PhoneNumber, "type", "node", nil))
+                        if node.Name != "" </span><span class="cov0" title="0">{
+                                r.store.AddQuad(quad.Make(node.PhoneNumber, "name", node.Name, nil))
+                        }</span>
+                }
+        }
+
+        // Load edges
+        <span class="cov0" title="0">for _, edgeJSON := range seedData.Edges </span><span class="cov0" title="0">{
+                // Ensure nodes exist
+                if !r.nodeExistsUnsafe(edgeJSON.From) </span><span class="cov0" title="0">{
+                        r.store.AddQuad(quad.Make(edgeJSON.From, "type", "node", nil))
+                }</span>
+                <span class="cov0" title="0">if !r.nodeExistsUnsafe(edgeJSON.To) </span><span class="cov0" title="0">{
+                        r.store.AddQuad(quad.Make(edgeJSON.To, "type", "node", nil))
+                }</span>
+
+                // Deserialize edge using registry
+                <span class="cov0" title="0">edge, err := edgeJSON.ToEdge(r.registry)
+                if err != nil </span><span class="cov0" title="0">{
+                        return fmt.Errorf("failed to deserialize edge %s: %w", edgeJSON.ID, err)
+                }</span>
+
+                // Store edge based on type
+                <span class="cov0" title="0">if edge.Type == models.EdgeTypeContact </span><span class="cov0" title="0">{
+                        r.store.AddQuad(quad.Make(edge.From, "has_contact", edge.To, nil))
+
+                        // Store contact metadata if available
+                        if contactMeta, ok := edge.Metadata.(*models.ContactMetadata); ok </span><span class="cov0" title="0">{
+                                contactKey := fmt.Sprintf("%s_contact_%s", edge.From, edge.To)
+                                if contactMeta.Name != "" </span><span class="cov0" title="0">{
+                                        r.store.AddQuad(quad.Make(contactKey, "name", contactMeta.Name, nil))
+                                        r.store.AddQuad(quad.Make(contactKey, "from", edge.From, nil))
+                                        r.store.AddQuad(quad.Make(contactKey, "to", edge.To, nil))
+                                }</span>
+                                <span class="cov0" title="0">if !contactMeta.AddedAt.IsZero() </span><span class="cov0" title="0">{
+                                        r.store.AddQuad(quad.Make(contactKey, "added_at", contactMeta.AddedAt.Format(time.RFC3339), nil))
+                                }</span>
+                        }
+                } else<span class="cov0" title="0"> if edge.Type == models.EdgeTypeCall </span><span class="cov0" title="0">{
+                        // Store call edge
+                        r.store.AddQuad(quad.Make(edge.ID, "type", "call", nil))
+                        r.store.AddQuad(quad.Make(edge.ID, "from", edge.From, nil))
+                        r.store.AddQuad(quad.Make(edge.ID, "to", edge.To, nil))
+
+                        // Store all metadata properties
+                        props := edge.GetProperties()
+                        for key, value := range props </span><span class="cov0" title="0">{
+                                r.store.AddQuad(quad.Make(edge.ID, key, value, nil))
+                        }</span>
+                }
+        }
+
+        <span class="cov0" title="0">return nil</span>
+}
+</pre>
+		
+		<pre class="file" id="file7" style="display: none">package repository
+
+import (
+        "context"
+        "encoding/json"
+        "errors"
+        "os"
+        "sync"
+
+        "credCode/models"
+)
+
+var (
+        ErrUserNotFound    = errors.New("user not found")
+        ErrContactNotFound = errors.New("contact not found")
+        ErrUserExists      = errors.New("user already exists")
+        ErrContactExists   = errors.New("contact already exists")
+)
+
+// UserRepository defines the interface for user operations
+type UserRepository interface {
+        // User CRUD operations
+        CreateUser(ctx context.Context, user *models.User) error
+        GetUserByID(ctx context.Context, id string) (*models.User, error)
+        GetUserByPhoneNumber(ctx context.Context, phone string) (*models.User, error)
+        GetAllUsers(ctx context.Context) ([]*models.User, error)
+        UpdateUser(ctx context.Context, user *models.User) error
+        DeleteUser(ctx context.Context, id string) error
+
+        // Contact CRUD operations
+        AddContact(ctx context.Context, userID string, contact *models.Contact) error
+        GetContact(ctx context.Context, userID, contactID string) (*models.Contact, error)
+        GetUserContacts(ctx context.Context, userID string) ([]*models.Contact, error)
+        UpdateContact(ctx context.Context, userID string, contact *models.Contact) error
+        DeleteContact(ctx context.Context, userID, contactID string) error
+
+        // Seed data operations
+        LoadSeedData(ctx context.Context, filePath string) error
+}
+
+// InMemoryUserRepository implements UserRepository with in-memory storage
+type InMemoryUserRepository struct {
+        users  map[string]*models.User // key: user ID
+        phones map[string]string       // key: phone number, value: user ID
+        mu     sync.RWMutex
+}
+
+// NewInMemoryUserRepository creates a new in-memory user repository
+func NewInMemoryUserRepository() *InMemoryUserRepository <span class="cov8" title="1">{
+        return &amp;InMemoryUserRepository{
+                users:  make(map[string]*models.User),
+                phones: make(map[string]string),
+        }
+}</span>
+
+// CreateUser creates a new user
+func (r *InMemoryUserRepository) CreateUser(ctx context.Context, user *models.User) error <span class="cov8" title="1">{
+        r.mu.Lock()
+        defer r.mu.Unlock()
+
+        if _, exists := r.users[user.ID]; exists </span><span class="cov8" title="1">{
+                return ErrUserExists
+        }</span>
+
+        <span class="cov8" title="1">if _, exists := r.phones[user.PhoneNumber]; exists </span><span class="cov8" title="1">{
+                return ErrUserExists
+        }</span>
+
+        <span class="cov8" title="1">r.users[user.ID] = user
+        r.phones[user.PhoneNumber] = user.ID
+        return nil</span>
+}
+
+// GetUserByID retrieves a user by ID
+func (r *InMemoryUserRepository) GetUserByID(ctx context.Context, id string) (*models.User, error) <span class="cov8" title="1">{
+        r.mu.RLock()
+        defer r.mu.RUnlock()
+
+        user, exists := r.users[id]
+        if !exists </span><span class="cov8" title="1">{
+                return nil, ErrUserNotFound
+        }</span>
+        <span class="cov8" title="1">return user, nil</span>
+}
+
+// GetUserByPhoneNumber retrieves a user by phone number
+func (r *InMemoryUserRepository) GetUserByPhoneNumber(ctx context.Context, phone string) (*models.User, error) <span class="cov8" title="1">{
+        r.mu.RLock()
+        defer r.mu.RUnlock()
+
+        userID, exists := r.phones[phone]
+        if !exists </span><span class="cov8" title="1">{
+                return nil, ErrUserNotFound
+        }</span>
+
+        <span class="cov8" title="1">user, exists := r.users[userID]
+        if !exists </span><span class="cov0" title="0">{
+                return nil, ErrUserNotFound
+        }</span>
+        <span class="cov8" title="1">return user, nil</span>
+}
+
+// GetAllUsers retrieves all users
+func (r *InMemoryUserRepository) GetAllUsers(ctx context.Context) ([]*models.User, error) <span class="cov8" title="1">{
+        r.mu.RLock()
+        defer r.mu.RUnlock()
+
+        users := make([]*models.User, 0, len(r.users))
+        for _, user := range r.users </span><span class="cov8" title="1">{
+                users = append(users, user)
+        }</span>
+        <span class="cov8" title="1">return users, nil</span>
+}
+
+// UpdateUser updates an existing user
+func (r *InMemoryUserRepository) UpdateUser(ctx context.Context, user *models.User) error <span class="cov8" title="1">{
+        r.mu.Lock()
+        defer r.mu.Unlock()
+
+        existingUser, exists := r.users[user.ID]
+        if !exists </span><span class="cov8" title="1">{
+                return ErrUserNotFound
+        }</span>
+
+        // If phone number is being changed, update the phone map
+        <span class="cov8" title="1">if existingUser.PhoneNumber != user.PhoneNumber </span><span class="cov0" title="0">{
+                delete(r.phones, existingUser.PhoneNumber)
+                r.phones[user.PhoneNumber] = user.ID
+        }</span>
+
+        <span class="cov8" title="1">r.users[user.ID] = user
+        return nil</span>
+}
+
+// DeleteUser deletes a user
+func (r *InMemoryUserRepository) DeleteUser(ctx context.Context, id string) error <span class="cov8" title="1">{
+        r.mu.Lock()
+        defer r.mu.Unlock()
+
+        user, exists := r.users[id]
+        if !exists </span><span class="cov8" title="1">{
+                return ErrUserNotFound
+        }</span>
+
+        <span class="cov8" title="1">delete(r.users, id)
+        delete(r.phones, user.PhoneNumber)
+        return nil</span>
+}
+
+// AddContact adds a contact to a user's contact list
+func (r *InMemoryUserRepository) AddContact(ctx context.Context, userID string, contact *models.Contact) error <span class="cov8" title="1">{
+        r.mu.Lock()
+        defer r.mu.Unlock()
+
+        user, exists := r.users[userID]
+        if !exists </span><span class="cov8" title="1">{
+                return ErrUserNotFound
+        }</span>
+
+        // Check if contact already exists
+        <span class="cov8" title="1">for _, c := range user.Contacts </span><span class="cov8" title="1">{
+                if c.ID == contact.ID </span><span class="cov8" title="1">{
+                        return ErrContactExists
+                }</span>
+        }
+
+        <span class="cov8" title="1">user.Contacts = append(user.Contacts, contact)
+        return nil</span>
+}
+
+// GetContact retrieves a specific contact from a user's contact list
+func (r *InMemoryUserRepository) GetContact(ctx context.Context, userID, contactID string) (*models.Contact, error) <span class="cov8" title="1">{
+        r.mu.RLock()
+        defer r.mu.RUnlock()
+
+        user, exists := r.users[userID]
+        if !exists </span><span class="cov0" title="0">{
+                return nil, ErrUserNotFound
+        }</span>
+
+        <span class="cov8" title="1">for _, contact := range user.Contacts </span><span class="cov8" title="1">{
+                if contact.ID == contactID </span><span class="cov8" title="1">{
+                        return contact, nil
+                }</span>
+        }
+
+        <span class="cov8" title="1">return nil, ErrContactNotFound</span>
+}
+
+// GetUserContacts retrieves all contacts for a user
+func (r *InMemoryUserRepository) GetUserContacts(ctx context.Context, userID string) ([]*models.Contact, error) <span class="cov8" title="1">{
+        r.mu.RLock()
+        defer r.mu.RUnlock()
+
+        user, exists := r.users[userID]
+        if !exists </span><span class="cov0" title="0">{
+                return nil, ErrUserNotFound
+        }</span>
+
+        <span class="cov8" title="1">return user.Contacts, nil</span>
+}
+
+// UpdateContact updates a contact in a user's contact list
+func (r *InMemoryUserRepository) UpdateContact(ctx context.Context, userID string, contact *models.Contact) error <span class="cov8" title="1">{
+        r.mu.Lock()
+        defer r.mu.Unlock()
+
+        user, exists := r.users[userID]
+        if !exists </span><span class="cov0" title="0">{
+                return ErrUserNotFound
+        }</span>
+
+        <span class="cov8" title="1">for i, c := range user.Contacts </span><span class="cov8" title="1">{
+                if c.ID == contact.ID </span><span class="cov8" title="1">{
+                        user.Contacts[i] = contact
+                        return nil
+                }</span>
+        }
+
+        <span class="cov0" title="0">return ErrContactNotFound</span>
+}
+
+// DeleteContact removes a contact from a user's contact list
+func (r *InMemoryUserRepository) DeleteContact(ctx context.Context, userID, contactID string) error <span class="cov8" title="1">{
+        r.mu.Lock()
+        defer r.mu.Unlock()
+
+        user, exists := r.users[userID]
+        if !exists </span><span class="cov0" title="0">{
+                return ErrUserNotFound
+        }</span>
+
+        <span class="cov8" title="1">for i, contact := range user.Contacts </span><span class="cov8" title="1">{
+                if contact.ID == contactID </span><span class="cov8" title="1">{
+                        user.Contacts = append(user.Contacts[:i], user.Contacts[i+1:]...)
+                        return nil
+                }</span>
+        }
+
+        <span class="cov0" title="0">return ErrContactNotFound</span>
+}
+
+// LoadSeedData loads seed data from a JSON file
+func (r *InMemoryUserRepository) LoadSeedData(ctx context.Context, filePath string) error <span class="cov0" title="0">{
+        r.mu.Lock()
+        defer r.mu.Unlock()
+
+        // Read the JSON file
+        data, err := os.ReadFile(filePath)
+        if err != nil </span><span class="cov0" title="0">{
+                return err
+        }</span>
+
+        // Parse the JSON
+        <span class="cov0" title="0">var seedData struct {
+                Users []*models.User `json:"users"`
+        }
+
+        if err := json.Unmarshal(data, &amp;seedData); err != nil </span><span class="cov0" title="0">{
+                return err
+        }</span>
+
+        // Load users into the repository
+        <span class="cov0" title="0">for _, user := range seedData.Users </span><span class="cov0" title="0">{
+                r.users[user.ID] = user
+                r.phones[user.PhoneNumber] = user.ID
+        }</span>
+
+        <span class="cov0" title="0">return nil</span>
+}
+</pre>
+		
+		<pre class="file" id="file8" style="display: none">package service
+
+import (
+        "context"
+        "log"
+
+        "credCode/models"
+        "credCode/repository"
+)
+
+// GraphBuilder defines the interface for building graphs from user data
+type GraphBuilder interface {
+        BuildFromUsers(userRepo repository.UserRepository, graphRepo repository.GraphRepository) error
+}
+
+// graphBuilder implements GraphBuilder
+type graphBuilder struct{}
+
+// NewGraphBuilder creates a new graph builder service
+func NewGraphBuilder() GraphBuilder <span class="cov0" title="0">{
+        return &amp;graphBuilder{}
+}</span>
+
+// BuildFromUsers constructs the graph from user repository data
+func (gb *graphBuilder) BuildFromUsers(userRepo repository.UserRepository, graphRepo repository.GraphRepository) error <span class="cov0" title="0">{
+        ctx := context.Background()
+
+        // Get all users
+        users, err := userRepo.GetAllUsers(ctx)
+        if err != nil </span><span class="cov0" title="0">{
+                return err
+        }</span>
+
+        // Add nodes to graph with names
+        <span class="cov0" title="0">nodeCount := 0
+        for _, user := range users </span><span class="cov0" title="0">{
+                if err := graphRepo.AddNodeWithName(ctx, user.PhoneNumber, user.Name); err != nil </span><span class="cov0" title="0">{
+                        // Node might already exist, continue
+                        log.Printf("Note: Node %s already exists or error: %v", user.PhoneNumber, err)
+                }</span> else<span class="cov0" title="0"> {
+                        nodeCount++
+                }</span>
+        }
+        <span class="cov0" title="0">log.Printf("  Added %d nodes to graph", nodeCount)
+
+        // Add contact edges from user contacts
+        contactCount := 0
+        for _, user := range users </span><span class="cov0" title="0">{
+                contacts, err := userRepo.GetUserContacts(ctx, user.ID)
+                if err != nil </span><span class="cov0" title="0">{
+                        continue</span>
+                }
+
+                <span class="cov0" title="0">for _, contact := range contacts </span><span class="cov0" title="0">{
+                        // Add contact edge with metadata
+                        contactMeta := &amp;models.ContactMetadata{
+                                Name:    contact.Name,
+                                AddedAt: contact.AddedAt,
+                        }
+
+                        // Add bidirectional contact edge
+                        _, err := graphRepo.AddEdgeWithMetadata(ctx, user.PhoneNumber, contact.PhoneNumber, contactMeta)
+                        if err != nil </span><span class="cov0" title="0">{
+                                log.Printf("Error adding contact edge: %v", err)
+                                continue</span>
+                        }
+                        <span class="cov0" title="0">contactCount++</span>
+                }
+        }
+        <span class="cov0" title="0">log.Printf("  Added %d contact edges to graph", contactCount)
+
+        return nil</span>
+}
+</pre>
+		
+		<pre class="file" id="file9" style="display: none">package rules
+
+import (
+        "context"
+        "fmt"
+        "time"
+
+        "credCode/models"
+        "credCode/repository"
+        "credCode/service"
+)
+
+// CallPatternRule evaluates spam score based on call patterns
+// Looks for suspicious patterns like: answered calls with very short duration
+type CallPatternRule struct {
+        durationThreshold int           // Duration threshold in seconds (e.g., 30)
+        timeWindow        time.Duration // Time window to analyze (e.g., 60 minutes)
+        suspiciousWeight  float64       // Weight for suspicious calls
+}
+
+// NewCallPatternRule creates a new call pattern rule
+func NewCallPatternRule(durationThreshold int, timeWindow time.Duration, suspiciousWeight float64) service.SpamRule <span class="cov8" title="1">{
+        return &amp;CallPatternRule{
+                durationThreshold: durationThreshold,
+                timeWindow:        timeWindow,
+                suspiciousWeight:  suspiciousWeight,
+        }
+}</span>
+
+// Name returns the rule name
+func (r *CallPatternRule) Name() string <span class="cov8" title="1">{
+        return "call_pattern_rule"
+}</span>
+
+// Evaluate evaluates the call pattern rule
+func (r *CallPatternRule) Evaluate(ctx context.Context, phoneNumber string, userPhoneNumber string, graphRepo repository.GraphRepository) (*models.SpamScore, error) <span class="cov8" title="1">{
+        // Query: Get calls in the last time window
+        timeStart := time.Now().Add(-r.timeWindow)
+
+        // Filter: is_answered=true AND duration&lt;=threshold
+        answered := true
+        maxDuration := r.durationThreshold
+
+        filters := repository.CallFilters{
+                IsAnswered:     &amp;answered,
+                MaxDuration:    &amp;maxDuration,
+                TimeRangeStart: &amp;timeStart,
+        }
+
+        // Get both outgoing and incoming calls
+        _, count := graphRepo.GetCallsWithFilters(ctx, phoneNumber, filters, "both")
+
+        var score float64
+        var reason string
+
+        if count == 0 </span><span class="cov8" title="1">{
+                // No suspicious calls - low spam score
+                score = 0.0
+                reason = fmt.Sprintf("No suspicious call patterns found in last %v", r.timeWindow)
+        }</span> else<span class="cov8" title="1"> {
+                // Calculate score based on number of suspicious calls
+                // More suspicious calls = higher spam score
+                // Score increases with count but caps at suspiciousWeight
+                score = r.suspiciousWeight * (1.0 - 1.0/(1.0+float64(count)))
+                if score &gt; r.suspiciousWeight </span><span class="cov0" title="0">{
+                        score = r.suspiciousWeight
+                }</span>
+
+                // Get total calls in time window for context
+                <span class="cov8" title="1">_, totalCount := graphRepo.GetCallsWithFilters(ctx, phoneNumber, repository.CallFilters{
+                        TimeRangeStart: &amp;timeStart,
+                }, "both")
+
+                reason = fmt.Sprintf("Found %d suspicious calls (answered but &lt;=%ds) out of %d total calls in last %v",
+                        count, r.durationThreshold, totalCount, r.timeWindow)</span>
+        }
+
+        <span class="cov8" title="1">return &amp;models.SpamScore{
+                RuleName: r.Name(),
+                Score:    score,
+                Reason:   reason,
+        }, nil</span>
+}
+
+// Ensure CallPatternRule implements SpamRule interface
+var _ service.SpamRule = (*CallPatternRule)(nil)
+</pre>
+		
+		<pre class="file" id="file10" style="display: none">package rules
+
+import (
+        "context"
+        "fmt"
+
+        "credCode/models"
+        "credCode/repository"
+        "credCode/service"
+)
+
+// ContactCountRule evaluates spam score based on how many users have saved this number
+// More users saving = lower spam score (more trusted)
+type ContactCountRule struct {
+        threshold int     // Minimum contacts to be considered trusted
+        maxScore  float64 // Maximum spam score if below threshold
+}
+
+// NewContactCountRule creates a new contact count rule
+func NewContactCountRule(threshold int, maxScore float64) service.SpamRule <span class="cov8" title="1">{
+        return &amp;ContactCountRule{
+                threshold: threshold,
+                maxScore:  maxScore,
+        }
+}</span>
+
+// Name returns the rule name
+func (r *ContactCountRule) Name() string <span class="cov8" title="1">{
+        return "contact_count_rule"
+}</span>
+
+// Evaluate evaluates the contact count rule
+func (r *ContactCountRule) Evaluate(ctx context.Context, phoneNumber string, userPhoneNumber string, graphRepo repository.GraphRepository) (*models.SpamScore, error) <span class="cov8" title="1">{
+        // Query: How many users have saved this phone number?
+        _, count := graphRepo.GetUsersWithContact(ctx, phoneNumber)
+
+        // Calculate score: fewer contacts = higher spam score
+        var score float64
+        var reason string
+
+        if count == 0 </span><span class="cov8" title="1">{
+                // No one has saved this number - high spam probability
+                score = r.maxScore
+                reason = fmt.Sprintf("Phone number not saved by any user (0 contacts)")
+        }</span> else<span class="cov8" title="1"> if count &lt; r.threshold </span><span class="cov8" title="1">{
+                // Below threshold - moderate spam probability
+                // Score decreases as count increases
+                score = r.maxScore * (1.0 - float64(count)/float64(r.threshold))
+                reason = fmt.Sprintf("Phone number saved by only %d user(s) (below threshold of %d)", count, r.threshold)
+        }</span> else<span class="cov8" title="1"> {
+                // Above threshold - low spam probability
+                // Score decreases further as count increases
+                score = 0.1 * (1.0 - float64(count-r.threshold)/float64(count+r.threshold))
+                if score &lt; 0 </span><span class="cov0" title="0">{
+                        score = 0
+                }</span>
+                <span class="cov8" title="1">reason = fmt.Sprintf("Phone number saved by %d users (trusted)", count)</span>
+        }
+
+        <span class="cov8" title="1">return &amp;models.SpamScore{
+                RuleName: r.Name(),
+                Score:    score,
+                Reason:   reason,
+        }, nil</span>
+}
+
+// Ensure ContactCountRule implements SpamRule interface
+var _ service.SpamRule = (*ContactCountRule)(nil)
+</pre>
+		
+		<pre class="file" id="file11" style="display: none">package rules
+
+import (
+        "context"
+        "fmt"
+
+        "credCode/models"
+        "credCode/repository"
+        "credCode/service"
+)
+
+// SecondLevelContactRule evaluates spam score based on second-level contacts
+// Checks if caller is in user's contacts (level 1) or in contacts of user's contacts (level 2)
+// More level-2 contacts having the caller = lower spam score (more trusted)
+type SecondLevelContactRule struct {
+        threshold int     // Minimum level-2 contacts to be considered trusted
+        maxScore  float64 // Maximum spam score if below threshold
+}
+
+// NewSecondLevelContactRule creates a new second-level contact rule
+func NewSecondLevelContactRule(threshold int, maxScore float64) service.SpamRule <span class="cov8" title="1">{
+        return &amp;SecondLevelContactRule{
+                threshold: threshold,
+                maxScore:  maxScore,
+        }
+}</span>
+
+// Name returns the rule name
+func (r *SecondLevelContactRule) Name() string <span class="cov8" title="1">{
+        return "second_level_contact_rule"
+}</span>
+
+// Evaluate evaluates the second-level contact rule
+func (r *SecondLevelContactRule) Evaluate(ctx context.Context, phoneNumber string, userPhoneNumber string, graphRepo repository.GraphRepository) (*models.SpamScore, error) <span class="cov8" title="1">{
+        // If user phone number is not provided, skip this rule
+        if userPhoneNumber == "" </span><span class="cov8" title="1">{
+                return &amp;models.SpamScore{
+                        RuleName: r.Name(),
+                        Score:    0.0,
+                        Reason:   "User phone number not provided, skipping second-level contact check",
+                }, nil
+        }</span>
+
+        // Step 1: Check if caller is directly in user's contacts (level 1) using Cayley query
+        <span class="cov8" title="1">isDirectContact := graphRepo.IsDirectContact(ctx, userPhoneNumber, phoneNumber)
+
+        if isDirectContact </span><span class="cov8" title="1">{
+                // Caller is in user's direct contacts - very low spam score
+                return &amp;models.SpamScore{
+                        RuleName: r.Name(),
+                        Score:    0.0,
+                        Reason:   "Caller is in user's direct contact list (level 1)",
+                }, nil
+        }</span>
+
+        // Step 2: Check contacts of user's contacts (level 2) using Cayley graph query
+        // This uses Cayley's path traversal: userPhone -has_contact-&gt; ? -has_contact-&gt; callerPhone
+        <span class="cov8" title="1">level2Count := graphRepo.GetSecondLevelContactCount(ctx, userPhoneNumber, phoneNumber)
+
+        // Calculate score based on level-2 count
+        var score float64
+        var reason string
+
+        if level2Count == 0 </span><span class="cov8" title="1">{
+                // No level-2 contacts have the caller - high spam probability
+                score = r.maxScore
+                reason = fmt.Sprintf("Caller not in user's contacts or contacts of user's contacts (0 level-2 matches)")
+        }</span> else<span class="cov8" title="1"> if level2Count &lt; r.threshold </span><span class="cov8" title="1">{
+                // Below threshold - moderate spam probability
+                // Score decreases as count increases
+                score = r.maxScore * (1.0 - float64(level2Count)/float64(r.threshold))
+                reason = fmt.Sprintf("Caller found in %d of user's contact's contact lists (below threshold of %d)", level2Count, r.threshold)
+        }</span> else<span class="cov8" title="1"> {
+                // Above threshold - low spam probability
+                // Score decreases further as count increases
+                score = 0.1 * (1.0 - float64(level2Count-r.threshold)/float64(level2Count+r.threshold))
+                if score &lt; 0 </span><span class="cov0" title="0">{
+                        score = 0
+                }</span>
+                <span class="cov8" title="1">reason = fmt.Sprintf("Caller found in %d of user's contact's contact lists (trusted via level-2)", level2Count)</span>
+        }
+
+        <span class="cov8" title="1">return &amp;models.SpamScore{
+                RuleName: r.Name(),
+                Score:    score,
+                Reason:   reason,
+        }, nil</span>
+}
+
+// Ensure SecondLevelContactRule implements SpamRule interface
+var _ service.SpamRule = (*SecondLevelContactRule)(nil)
+</pre>
+		
+		<pre class="file" id="file12" style="display: none">package service
+
+import (
+        "context"
+        "fmt"
+        "time"
+
+        "credCode/models"
+        "credCode/repository"
+        "credCode/service/scoring"
+)
+
+// SpamDetectionService orchestrates spam detection using multiple rules
+type SpamDetectionService struct {
+        graphRepo repository.GraphRepository
+        registry  *SpamRuleRegistry
+        scorer    scoring.Scorer
+        threshold float64 // Average score threshold to consider as spam (e.g., 0.5)
+}
+
+// NewSpamDetectionService creates a new spam detection service
+func NewSpamDetectionService(graphRepo repository.GraphRepository, threshold float64) *SpamDetectionService <span class="cov8" title="1">{
+        service := &amp;SpamDetectionService{
+                graphRepo: graphRepo,
+                registry:  NewSpamRuleRegistry(),
+                scorer:    scoring.NewAverageScorer(),
+                threshold: threshold,
+        }
+
+        // Register default rules
+        service.registerDefaultRules()
+
+        return service
+}</span>
+
+// registerDefaultRules registers the default spam detection rules
+// This is a no-op - rules should be registered externally to avoid import cycles
+func (s *SpamDetectionService) registerDefaultRules() {<span class="cov8" title="1">
+        // Rules are registered via RegisterRule() from external packages
+        // This avoids import cycles between service and rules packages
+}</span>
+
+// RegisterRule allows adding custom rules
+func (s *SpamDetectionService) RegisterRule(rule SpamRule) <span class="cov0" title="0">{
+        s.registry.Register(rule)
+}</span>
+
+// DetectSpam runs all registered rules and returns the spam detection result
+func (s *SpamDetectionService) DetectSpam(phoneNumber string, userPhoneNumber string) (*models.SpamDetectionResult, error) <span class="cov8" title="1">{
+        rules := s.registry.GetAllRules()
+        if len(rules) == 0 </span><span class="cov8" title="1">{
+                return nil, fmt.Errorf("no spam detection rules registered")
+        }</span>
+
+        <span class="cov0" title="0">ruleScores := make([]models.SpamScore, 0, len(rules))
+
+        // Evaluate each rule
+        ctx := context.Background()
+        for _, rule := range rules </span><span class="cov0" title="0">{
+                score, err := rule.Evaluate(ctx, phoneNumber, userPhoneNumber, s.graphRepo)
+                if err != nil </span><span class="cov0" title="0">{
+                        // Log error but continue with other rules
+                        fmt.Printf("Error evaluating rule %s: %v\n", rule.Name(), err)
+                        continue</span>
+                }
+
+                <span class="cov0" title="0">ruleScores = append(ruleScores, *score)</span>
+        }
+
+        // Calculate score using injected scorer
+        <span class="cov0" title="0">averageScore, isSpam := s.scorer.CalculateScore(ruleScores, s.threshold)
+
+        result := &amp;models.SpamDetectionResult{
+                PhoneNumber:     phoneNumber,
+                UserPhoneNumber: userPhoneNumber,
+                IsSpam:          isSpam,
+                AverageScore:    averageScore,
+                RuleScores:      ruleScores,
+                Timestamp:       time.Now().Format(time.RFC3339),
+        }
+
+        return result, nil</span>
+}
+
+// GetRegisteredRules returns the names of all registered rules
+func (s *SpamDetectionService) GetRegisteredRules() []string <span class="cov8" title="1">{
+        rules := s.registry.GetAllRules()
+        names := make([]string, len(rules))
+        for i, rule := range rules </span><span class="cov0" title="0">{
+                names[i] = rule.Name()
+        }</span>
+        <span class="cov8" title="1">return names</span>
+}
+</pre>
+		
+		<pre class="file" id="file13" style="display: none">package service
+
+import (
+        "context"
+
+        "credCode/models"
+        "credCode/repository"
+)
+
+// SpamRule defines the interface for spam detection rules
+// Each rule analyzes the graph data and returns a spam score
+type SpamRule interface {
+        // Name returns the name of the rule
+        Name() string
+
+        // Evaluate evaluates the rule and returns a spam score
+        // Score: 0.0 = not spam, 1.0 = definitely spam
+        // ctx: Context for cancellation and timeouts
+        // phoneNumber: The caller's phone number
+        // userPhoneNumber: The user's phone number (optional, empty string if not provided)
+        // graphRepo: The graph repository to query
+        Evaluate(ctx context.Context, phoneNumber string, userPhoneNumber string, graphRepo repository.GraphRepository) (*models.SpamScore, error)
+}
+
+// SpamRuleRegistry manages all registered spam rules
+type SpamRuleRegistry struct {
+        rules []SpamRule
+}
+
+// NewSpamRuleRegistry creates a new rule registry
+func NewSpamRuleRegistry() *SpamRuleRegistry <span class="cov8" title="1">{
+        return &amp;SpamRuleRegistry{
+                rules: make([]SpamRule, 0),
+        }
+}</span>
+
+// Register adds a rule to the registry
+func (r *SpamRuleRegistry) Register(rule SpamRule) <span class="cov0" title="0">{
+        r.rules = append(r.rules, rule)
+}</span>
+
+// GetAllRules returns all registered rules
+func (r *SpamRuleRegistry) GetAllRules() []SpamRule <span class="cov8" title="1">{
+        return r.rules
+}</span>
+</pre>
+		
+		</div>
+	</body>
+	<script>
+	(function() {
+		var files = document.getElementById('files');
+		var visible;
+		files.addEventListener('change', onChange, false);
+		function select(part) {
+			if (visible)
+				visible.style.display = 'none';
+			visible = document.getElementById(part);
+			if (!visible)
+				return;
+			files.value = part;
+			visible.style.display = 'block';
+			location.hash = part;
+		}
+		function onChange() {
+			select(files.value);
+			window.scrollTo(0, 0);
+		}
+		if (location.hash != "") {
+			select(location.hash.substr(1));
+		}
+		if (!visible) {
+			select("file0");
+		}
+	})();
+	</script>
+</html>
