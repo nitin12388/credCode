@@ -33,33 +33,20 @@ type CallFilters struct {
 }
 
 // GraphRepository defines the interface for graph operations
+// It embeds smaller interfaces for backward compatibility while allowing clients
+// to depend only on the interfaces they need (Interface Segregation Principle)
 type GraphRepository interface {
-	// Node operations
-	AddNode(phoneNumber string) error
-	GetNode(phoneNumber string) (*models.Node, error)
-	NodeExists(phoneNumber string) bool
-	GetAllNodes() ([]*models.Node, error)
-	DeleteNode(phoneNumber string) error
-
-	// Edge operations
-	AddContactEdge(phone1, phone2 string) error
-	AddCallEdge(from, to string, isAnswered bool, duration int, timestamp time.Time) (*models.Edge, error)
-	GetEdge(edgeID string) (*models.Edge, error)
-	DeleteEdge(edgeID string) error
-
-	// Query operations
-	GetUsersWithContact(phoneNumber string) ([]string, int)
-	GetOutgoingEdges(phoneNumber string, edgeType models.EdgeType) []*models.Edge
-	GetIncomingEdges(phoneNumber string, edgeType models.EdgeType) []*models.Edge
-	GetCallsWithFilters(phoneNumber string, filters CallFilters, direction string) ([]*models.Edge, int)
-
-	// Seed data operations
-	LoadSeedData(filePath string) error
+	// Embed smaller interfaces
+	NodeRepository
+	EdgeRepository
+	QueryRepository
+	SeedDataLoader
 }
 
 // CayleyGraphRepository implements GraphRepository using Cayley
 type CayleyGraphRepository struct {
 	store       *cayley.Handle
+	registry    *models.EdgeMetadataRegistry
 	edgeCounter int
 	mu          sync.RWMutex
 }
@@ -74,6 +61,7 @@ func NewCayleyGraphRepository() (*CayleyGraphRepository, error) {
 
 	return &CayleyGraphRepository{
 		store:       store,
+		registry:    models.NewEdgeMetadataRegistry(),
 		edgeCounter: 0,
 	}, nil
 }
@@ -87,8 +75,13 @@ func NewInMemoryGraphRepository() *CayleyGraphRepository {
 	return repo
 }
 
-// AddNode adds a new node to the graph
-func (r *CayleyGraphRepository) AddNode(phoneNumber string) error {
+// AddNode adds a new node to the graph (backward compatible - without name)
+func (r *CayleyGraphRepository) AddNode(ctx context.Context, phoneNumber string) error {
+	return r.AddNodeWithName(ctx, phoneNumber, "")
+}
+
+// AddNodeWithName adds a new node with name to the graph
+func (r *CayleyGraphRepository) AddNodeWithName(ctx context.Context, phoneNumber, name string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -98,16 +91,18 @@ func (r *CayleyGraphRepository) AddNode(phoneNumber string) error {
 	}
 
 	// Add node as a quad: phoneNumber -> type -> "node"
-	quad := quad.Make(phoneNumber, "type", "node", nil)
-	if err := r.store.AddQuad(quad); err != nil {
-		return fmt.Errorf("failed to add node: %w", err)
+	r.store.AddQuad(quad.Make(phoneNumber, "type", "node", nil))
+
+	// Add name if provided
+	if name != "" {
+		r.store.AddQuad(quad.Make(phoneNumber, "name", name, nil))
 	}
 
 	return nil
 }
 
 // GetNode retrieves a node by phone number
-func (r *CayleyGraphRepository) GetNode(phoneNumber string) (*models.Node, error) {
+func (r *CayleyGraphRepository) GetNode(ctx context.Context, phoneNumber string) (*models.Node, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -115,13 +110,24 @@ func (r *CayleyGraphRepository) GetNode(phoneNumber string) (*models.Node, error
 		return nil, ErrNodeNotFound
 	}
 
-	return &models.Node{
+	node := &models.Node{
 		PhoneNumber: phoneNumber,
-	}, nil
+	}
+
+	// Get name if it exists
+	namePath := cayley.StartPath(r.store, quad.String(phoneNumber)).Out(quad.String("name"))
+	nameIt, _ := namePath.BuildIterator().Optimize()
+	if nameIt.Next(ctx) {
+		token := nameIt.Result()
+		node.Name = quad.ToString(r.store.NameOf(token))
+	}
+	nameIt.Close()
+
+	return node, nil
 }
 
 // NodeExists checks if a node exists
-func (r *CayleyGraphRepository) NodeExists(phoneNumber string) bool {
+func (r *CayleyGraphRepository) NodeExists(ctx context.Context, phoneNumber string) bool {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.nodeExistsUnsafe(phoneNumber)
@@ -139,12 +145,11 @@ func (r *CayleyGraphRepository) nodeExistsUnsafe(phoneNumber string) bool {
 }
 
 // GetAllNodes retrieves all nodes
-func (r *CayleyGraphRepository) GetAllNodes() ([]*models.Node, error) {
+func (r *CayleyGraphRepository) GetAllNodes(ctx context.Context) ([]*models.Node, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
 	nodes := make([]*models.Node, 0)
-	ctx := context.TODO()
 
 	// Find all subjects that have type "node"
 	p := cayley.StartPath(r.store).Has(quad.String("type"), quad.String("node"))
@@ -155,9 +160,21 @@ func (r *CayleyGraphRepository) GetAllNodes() ([]*models.Node, error) {
 	for it.Next(ctx) {
 		token := it.Result()
 		phoneNumber := quad.ToString(r.store.NameOf(token))
-		nodes = append(nodes, &models.Node{
+
+		node := &models.Node{
 			PhoneNumber: phoneNumber,
-		})
+		}
+
+		// Get name if it exists
+		namePath := cayley.StartPath(r.store, quad.String(phoneNumber)).Out(quad.String("name"))
+		nameIt, _ := namePath.BuildIterator().Optimize()
+		if nameIt.Next(ctx) {
+			nameToken := nameIt.Result()
+			node.Name = quad.ToString(r.store.NameOf(nameToken))
+		}
+		nameIt.Close()
+
+		nodes = append(nodes, node)
 	}
 
 	if err := it.Err(); err != nil {
@@ -168,7 +185,7 @@ func (r *CayleyGraphRepository) GetAllNodes() ([]*models.Node, error) {
 }
 
 // DeleteNode removes a node and all its edges
-func (r *CayleyGraphRepository) DeleteNode(phoneNumber string) error {
+func (r *CayleyGraphRepository) DeleteNode(ctx context.Context, phoneNumber string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -176,13 +193,9 @@ func (r *CayleyGraphRepository) DeleteNode(phoneNumber string) error {
 		return ErrNodeNotFound
 	}
 
-	ctx := context.TODO()
-
 	// Delete all quads where this phone number is subject or object
-	// This includes the node itself and all edges
 	quadsToDelete := make([]*quad.Quad, 0)
 
-	// Find quads where phoneNumber is subject
 	it := r.store.QuadsAllIterator()
 	defer it.Close()
 
@@ -206,32 +219,62 @@ func (r *CayleyGraphRepository) DeleteNode(phoneNumber string) error {
 	return nil
 }
 
-// AddContactEdge adds a bidirectional contact edge between two phone numbers
+// AddContactEdge adds a bidirectional contact edge between two phone numbers (backward compatible)
 func (r *CayleyGraphRepository) AddContactEdge(phone1, phone2 string) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	// Ensure both nodes exist
-	if !r.nodeExistsUnsafe(phone1) {
-		r.store.AddQuad(quad.Make(phone1, "type", "node", nil))
-	}
-	if !r.nodeExistsUnsafe(phone2) {
-		r.store.AddQuad(quad.Make(phone2, "type", "node", nil))
+	// Use default metadata
+	metadata := &models.ContactMetadata{
+		Name:    "", // Empty name for backward compatibility
+		AddedAt: time.Now(),
 	}
 
-	// Create bidirectional contact edges
-	// phone1 -has_contact-> phone2
-	r.store.AddQuad(quad.Make(phone1, "has_contact", phone2, nil))
-	// phone2 -has_contact-> phone1
-	r.store.AddQuad(quad.Make(phone2, "has_contact", phone1, nil))
+	// Add edge in both directions
+	ctx := context.Background()
+	_, err := r.AddEdgeWithMetadata(ctx, phone1, phone2, metadata)
+	if err != nil {
+		return err
+	}
 
-	return nil
+	return err
 }
 
-// AddCallEdge adds a directional call edge from one phone to another
+// AddContactEdgeWithMetadata adds a contact edge with full metadata
+func (r *CayleyGraphRepository) AddContactEdgeWithMetadata(phone1, phone2 string, name string, addedAt time.Time) error {
+	metadata := &models.ContactMetadata{
+		Name:    name,
+		AddedAt: addedAt,
+	}
+
+	// Add edge in both directions
+	ctx := context.Background()
+	_, err := r.AddEdgeWithMetadata(ctx, phone1, phone2, metadata)
+	if err != nil {
+		return err
+	}
+
+	return err
+}
+
+// AddCallEdge adds a directional call edge (backward compatible)
 func (r *CayleyGraphRepository) AddCallEdge(from, to string, isAnswered bool, duration int, timestamp time.Time) (*models.Edge, error) {
+	metadata := &models.CallMetadata{
+		IsAnswered:        isAnswered,
+		DurationInSeconds: duration,
+		Timestamp:         timestamp,
+	}
+
+	ctx := context.Background()
+	return r.AddEdgeWithMetadata(ctx, from, to, metadata)
+}
+
+// AddEdgeWithMetadata is the generic method to add any edge with metadata
+func (r *CayleyGraphRepository) AddEdgeWithMetadata(ctx context.Context, from, to string, metadata models.EdgeMetadata) (*models.Edge, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+
+	// Validate metadata
+	if err := metadata.Validate(); err != nil {
+		return nil, fmt.Errorf("invalid metadata: %w", err)
+	}
 
 	// Ensure both nodes exist
 	if !r.nodeExistsUnsafe(from) {
@@ -241,42 +284,71 @@ func (r *CayleyGraphRepository) AddCallEdge(from, to string, isAnswered bool, du
 		r.store.AddQuad(quad.Make(to, "type", "node", nil))
 	}
 
-	// Generate unique call ID
+	properties := metadata.ToProperties()
+
+	// Generate unique edge ID
 	r.edgeCounter++
-	callID := fmt.Sprintf("call_%d", r.edgeCounter)
+	edgeID := fmt.Sprintf("%s_%d", metadata.EdgeType(), r.edgeCounter)
 
-	// Store call as multiple quads (RDF-style)
-	r.store.AddQuad(quad.Make(callID, "type", "call", nil))
-	r.store.AddQuad(quad.Make(callID, "from", from, nil))
-	r.store.AddQuad(quad.Make(callID, "to", to, nil))
-	r.store.AddQuad(quad.Make(callID, "is_answered", isAnswered, nil))
-	r.store.AddQuad(quad.Make(callID, "duration", duration, nil))
-	r.store.AddQuad(quad.Make(callID, "created_at", timestamp.Format(time.RFC3339), nil))
+	// Store edge based on type
+	if metadata.EdgeType() == models.EdgeTypeContact {
+		// Contact edges are stored directly: from -> has_contact -> to
+		r.store.AddQuad(quad.Make(from, "has_contact", to, nil))
 
-	// Create edge object to return
-	callProps := &models.CallProperties{
-		IsAnswered:        isAnswered,
-		DurationInSeconds: duration,
+		// Store metadata as properties on the edge
+		if name, ok := properties["name"].(string); ok && name != "" {
+			// Store contact name: from -> contact_name_to -> name
+			contactKey := fmt.Sprintf("%s_contact_%s", from, to)
+			r.store.AddQuad(quad.Make(contactKey, "name", name, nil))
+			r.store.AddQuad(quad.Make(contactKey, "from", from, nil))
+			r.store.AddQuad(quad.Make(contactKey, "to", to, nil))
+		}
+		if addedAt, ok := properties["added_at"].(string); ok {
+			contactKey := fmt.Sprintf("%s_contact_%s", from, to)
+			r.store.AddQuad(quad.Make(contactKey, "added_at", addedAt, nil))
+		}
+	} else if metadata.EdgeType() == models.EdgeTypeCall {
+		// Call edges are stored with an ID: call_id -> type -> "call"
+		r.store.AddQuad(quad.Make(edgeID, "type", "call", nil))
+		r.store.AddQuad(quad.Make(edgeID, "from", from, nil))
+		r.store.AddQuad(quad.Make(edgeID, "to", to, nil))
+
+		// Store all metadata properties
+		for key, value := range properties {
+			r.store.AddQuad(quad.Make(edgeID, key, value, nil))
+		}
 	}
 
+	// Create edge object
 	edge := &models.Edge{
-		ID:         callID,
-		From:       from,
-		To:         to,
-		Type:       models.EdgeTypeCall,
-		Properties: callProps.ToMap(),
-		CreatedAt:  timestamp,
+		ID:        edgeID,
+		From:      from,
+		To:        to,
+		Type:      metadata.EdgeType(),
+		Metadata:  metadata,
+		CreatedAt: time.Now(),
+	}
+
+	// Set CreatedAt from metadata if available
+	if callMeta, ok := metadata.(*models.CallMetadata); ok {
+		edge.CreatedAt = callMeta.Timestamp
+	} else if contactMeta, ok := metadata.(*models.ContactMetadata); ok {
+		edge.CreatedAt = contactMeta.AddedAt
 	}
 
 	return edge, nil
 }
 
-// GetEdge retrieves an edge by ID
-func (r *CayleyGraphRepository) GetEdge(edgeID string) (*models.Edge, error) {
+// GetEdge retrieves an edge by ID (backward compatible - returns edge with properties map)
+func (r *CayleyGraphRepository) GetEdge(ctx context.Context, edgeID string) (*models.Edge, error) {
+	edge, _, err := r.GetEdgeWithMetadata(ctx, edgeID)
+	return edge, err
+}
+
+// GetEdgeWithMetadata retrieves an edge with its metadata
+func (r *CayleyGraphRepository) GetEdgeWithMetadata(ctx context.Context, edgeID string) (*models.Edge, models.EdgeMetadata, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-
-	ctx := context.TODO()
 
 	// Check if edge exists and get its type
 	typePath := cayley.StartPath(r.store, quad.String(edgeID)).Out(quad.String("type"))
@@ -284,28 +356,97 @@ func (r *CayleyGraphRepository) GetEdge(edgeID string) (*models.Edge, error) {
 	defer typeIt.Close()
 
 	if !typeIt.Next(ctx) {
-		return nil, ErrEdgeNotFound
+		// Try to find contact edge by checking if it's a contact metadata key
+		return r.getContactEdgeByKey(edgeID)
 	}
 
 	token := typeIt.Result()
-	edgeType := quad.ToString(r.store.NameOf(token))
+	edgeTypeStr := quad.ToString(r.store.NameOf(token))
 
-	if edgeType == "call" {
-		return r.getCallEdgeUnsafe(edgeID)
+	if edgeTypeStr == "call" {
+		return r.getCallEdgeWithMetadataUnsafe(edgeID)
 	}
 
-	return nil, ErrEdgeNotFound
+	return nil, nil, ErrEdgeNotFound
 }
 
-// getCallEdgeUnsafe retrieves a call edge (must be called with lock held)
-func (r *CayleyGraphRepository) getCallEdgeUnsafe(callID string) (*models.Edge, error) {
+// getContactEdgeByKey retrieves a contact edge by its metadata key
+func (r *CayleyGraphRepository) getContactEdgeByKey(key string) (*models.Edge, models.EdgeMetadata, error) {
+	ctx := context.TODO()
+
+	// Check if this is a contact metadata key
+	fromPath := cayley.StartPath(r.store, quad.String(key)).Out(quad.String("from"))
+	fromIt, _ := fromPath.BuildIterator().Optimize()
+	if !fromIt.Next(ctx) {
+		fromIt.Close()
+		return nil, nil, ErrEdgeNotFound
+	}
+
+	fromToken := fromIt.Result()
+	from := quad.ToString(r.store.NameOf(fromToken))
+	fromIt.Close()
+
+	toPath := cayley.StartPath(r.store, quad.String(key)).Out(quad.String("to"))
+	toIt, _ := toPath.BuildIterator().Optimize()
+	if !toIt.Next(ctx) {
+		toIt.Close()
+		return nil, nil, ErrEdgeNotFound
+	}
+
+	toToken := toIt.Result()
+	to := quad.ToString(r.store.NameOf(toToken))
+	toIt.Close()
+
+	// Get name
+	name := ""
+	namePath := cayley.StartPath(r.store, quad.String(key)).Out(quad.String("name"))
+	nameIt, _ := namePath.BuildIterator().Optimize()
+	if nameIt.Next(ctx) {
+		nameToken := nameIt.Result()
+		name = quad.ToString(r.store.NameOf(nameToken))
+	}
+	nameIt.Close()
+
+	// Get added_at
+	addedAt := time.Now()
+	addedAtPath := cayley.StartPath(r.store, quad.String(key)).Out(quad.String("added_at"))
+	addedAtIt, _ := addedAtPath.BuildIterator().Optimize()
+	if addedAtIt.Next(ctx) {
+		addedAtToken := addedAtIt.Result()
+		addedAtStr := quad.ToString(r.store.NameOf(addedAtToken))
+		if t, err := time.Parse(time.RFC3339, addedAtStr); err == nil {
+			addedAt = t
+		}
+	}
+	addedAtIt.Close()
+
+	metadata := &models.ContactMetadata{
+		Name:    name,
+		AddedAt: addedAt,
+	}
+
+	edge := &models.Edge{
+		ID:        key,
+		From:      from,
+		To:        to,
+		Type:      models.EdgeTypeContact,
+		Metadata:  metadata,
+		CreatedAt: addedAt,
+	}
+
+	return edge, metadata, nil
+}
+
+// getCallEdgeWithMetadataUnsafe retrieves a call edge with metadata (must be called with lock held)
+func (r *CayleyGraphRepository) getCallEdgeWithMetadataUnsafe(callID string) (*models.Edge, models.EdgeMetadata, error) {
 	ctx := context.TODO()
 
 	edge := &models.Edge{
-		ID:         callID,
-		Type:       models.EdgeTypeCall,
-		Properties: make(map[string]interface{}),
+		ID:   callID,
+		Type: models.EdgeTypeCall,
 	}
+
+	properties := make(map[string]interface{})
 
 	// Get "from" phone
 	fromPath := cayley.StartPath(r.store, quad.String(callID)).Out(quad.String("from"))
@@ -325,57 +466,53 @@ func (r *CayleyGraphRepository) getCallEdgeUnsafe(callID string) (*models.Edge, 
 	}
 	toIt.Close()
 
-	// Get "is_answered"
-	ansPath := cayley.StartPath(r.store, quad.String(callID)).Out(quad.String("is_answered"))
-	ansIt, _ := ansPath.BuildIterator().Optimize()
-	if ansIt.Next(ctx) {
-		token := ansIt.Result()
-		val := r.store.NameOf(token)
-		nativeVal := quad.NativeOf(val)
-		// Handle bool conversion
-		if boolVal, ok := nativeVal.(bool); ok {
-			edge.Properties["is_answered"] = boolVal
-		}
-	}
-	ansIt.Close()
+	// Get all properties
+	propertyPredicates := []string{"is_answered", "duration_in_seconds", "timestamp", "created_at"}
+	for _, pred := range propertyPredicates {
+		propPath := cayley.StartPath(r.store, quad.String(callID)).Out(quad.String(pred))
+		propIt, _ := propPath.BuildIterator().Optimize()
+		if propIt.Next(ctx) {
+			token := propIt.Result()
+			val := r.store.NameOf(token)
+			nativeVal := quad.NativeOf(val)
 
-	// Get "duration"
-	durPath := cayley.StartPath(r.store, quad.String(callID)).Out(quad.String("duration"))
-	durIt, _ := durPath.BuildIterator().Optimize()
-	if durIt.Next(ctx) {
-		token := durIt.Result()
-		val := r.store.NameOf(token)
-		nativeVal := quad.NativeOf(val)
-		// Handle int conversion
-		if intVal, ok := nativeVal.(int); ok {
-			edge.Properties["duration_in_seconds"] = intVal
-		} else if int64Val, ok := nativeVal.(int64); ok {
-			edge.Properties["duration_in_seconds"] = int(int64Val)
+			// Map property names
+			if pred == "duration_in_seconds" {
+				if intVal, ok := nativeVal.(int); ok {
+					properties["duration_in_seconds"] = intVal
+				} else if int64Val, ok := nativeVal.(int64); ok {
+					properties["duration_in_seconds"] = int(int64Val)
+				}
+			} else if pred == "is_answered" {
+				if boolVal, ok := nativeVal.(bool); ok {
+					properties["is_answered"] = boolVal
+				}
+			} else if pred == "timestamp" || pred == "created_at" {
+				if timeStr, ok := nativeVal.(string); ok {
+					properties["timestamp"] = timeStr
+					if t, err := time.Parse(time.RFC3339, timeStr); err == nil {
+						edge.CreatedAt = t
+					}
+				}
+			}
 		}
+		propIt.Close()
 	}
-	durIt.Close()
 
-	// Get "created_at"
-	timePath := cayley.StartPath(r.store, quad.String(callID)).Out(quad.String("created_at"))
-	timeIt, _ := timePath.BuildIterator().Optimize()
-	if timeIt.Next(ctx) {
-		token := timeIt.Result()
-		timeStr := quad.ToString(r.store.NameOf(token))
-		if t, err := time.Parse(time.RFC3339, timeStr); err == nil {
-			edge.CreatedAt = t
-		}
+	// Deserialize metadata
+	metadata, err := r.registry.Deserialize(models.EdgeTypeCall, properties)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to deserialize call metadata: %w", err)
 	}
-	timeIt.Close()
 
-	return edge, nil
+	edge.Metadata = metadata
+	return edge, metadata, nil
 }
 
 // DeleteEdge removes an edge from the graph
-func (r *CayleyGraphRepository) DeleteEdge(edgeID string) error {
+func (r *CayleyGraphRepository) DeleteEdge(ctx context.Context, edgeID string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-
-	ctx := context.TODO()
 
 	// Find and delete all quads related to this edge
 	it := r.store.QuadsAllIterator()
@@ -407,11 +544,9 @@ func (r *CayleyGraphRepository) DeleteEdge(edgeID string) error {
 
 // GetUsersWithContact returns all phone numbers that have the given phone number in their contacts
 // Query 1: Give me count or all the users who have saved a phone number in their contact list
-func (r *CayleyGraphRepository) GetUsersWithContact(phoneNumber string) ([]string, int) {
+func (r *CayleyGraphRepository) GetUsersWithContact(ctx context.Context, phoneNumber string) ([]string, int) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-
-	ctx := context.TODO()
 	users := make([]string, 0)
 
 	// Find all phone numbers that have has_contact edge pointing to this phoneNumber
@@ -431,11 +566,10 @@ func (r *CayleyGraphRepository) GetUsersWithContact(phoneNumber string) ([]strin
 }
 
 // GetOutgoingEdges returns all outgoing edges of a specific type from a phone number
-func (r *CayleyGraphRepository) GetOutgoingEdges(phoneNumber string, edgeType models.EdgeType) []*models.Edge {
+func (r *CayleyGraphRepository) GetOutgoingEdges(ctx context.Context, phoneNumber string, edgeType models.EdgeType) []*models.Edge {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	ctx := context.TODO()
 	edges := make([]*models.Edge, 0)
 
 	if edgeType == models.EdgeTypeContact {
@@ -447,12 +581,44 @@ func (r *CayleyGraphRepository) GetOutgoingEdges(phoneNumber string, edgeType mo
 		for it.Next(ctx) {
 			token := it.Result()
 			toPhone := quad.ToString(r.store.NameOf(token))
-			edges = append(edges, &models.Edge{
-				From:       phoneNumber,
-				To:         toPhone,
-				Type:       models.EdgeTypeContact,
-				Properties: make(map[string]interface{}),
-			})
+
+			// Try to get metadata
+			contactKey := fmt.Sprintf("%s_contact_%s", phoneNumber, toPhone)
+			edge := &models.Edge{
+				From: phoneNumber,
+				To:   toPhone,
+				Type: models.EdgeTypeContact,
+			}
+
+			// Get metadata if available
+			namePath := cayley.StartPath(r.store, quad.String(contactKey)).Out(quad.String("name"))
+			nameIt, _ := namePath.BuildIterator().Optimize()
+			if nameIt.Next(ctx) {
+				nameToken := nameIt.Result()
+				name := quad.ToString(r.store.NameOf(nameToken))
+				addedAt := time.Now()
+
+				addedAtPath := cayley.StartPath(r.store, quad.String(contactKey)).Out(quad.String("added_at"))
+				addedAtIt, _ := addedAtPath.BuildIterator().Optimize()
+				if addedAtIt.Next(ctx) {
+					addedAtToken := addedAtIt.Result()
+					addedAtStr := quad.ToString(r.store.NameOf(addedAtToken))
+					if t, err := time.Parse(time.RFC3339, addedAtStr); err == nil {
+						addedAt = t
+					}
+				}
+				addedAtIt.Close()
+
+				metadata := &models.ContactMetadata{
+					Name:    name,
+					AddedAt: addedAt,
+				}
+				edge.Metadata = metadata
+				edge.CreatedAt = addedAt
+			}
+			nameIt.Close()
+
+			edges = append(edges, edge)
 		}
 	} else if edgeType == models.EdgeTypeCall {
 		// Find all calls where from = phoneNumber
@@ -463,11 +629,10 @@ func (r *CayleyGraphRepository) GetOutgoingEdges(phoneNumber string, edgeType mo
 }
 
 // GetIncomingEdges returns all incoming edges of a specific type to a phone number
-func (r *CayleyGraphRepository) GetIncomingEdges(phoneNumber string, edgeType models.EdgeType) []*models.Edge {
+func (r *CayleyGraphRepository) GetIncomingEdges(ctx context.Context, phoneNumber string, edgeType models.EdgeType) []*models.Edge {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	ctx := context.TODO()
 	edges := make([]*models.Edge, 0)
 
 	if edgeType == models.EdgeTypeContact {
@@ -479,12 +644,43 @@ func (r *CayleyGraphRepository) GetIncomingEdges(phoneNumber string, edgeType mo
 		for it.Next(ctx) {
 			token := it.Result()
 			fromPhone := quad.ToString(r.store.NameOf(token))
-			edges = append(edges, &models.Edge{
-				From:       fromPhone,
-				To:         phoneNumber,
-				Type:       models.EdgeTypeContact,
-				Properties: make(map[string]interface{}),
-			})
+
+			edge := &models.Edge{
+				From: fromPhone,
+				To:   phoneNumber,
+				Type: models.EdgeTypeContact,
+			}
+
+			// Try to get metadata
+			contactKey := fmt.Sprintf("%s_contact_%s", fromPhone, phoneNumber)
+			namePath := cayley.StartPath(r.store, quad.String(contactKey)).Out(quad.String("name"))
+			nameIt, _ := namePath.BuildIterator().Optimize()
+			if nameIt.Next(ctx) {
+				nameToken := nameIt.Result()
+				name := quad.ToString(r.store.NameOf(nameToken))
+				addedAt := time.Now()
+
+				addedAtPath := cayley.StartPath(r.store, quad.String(contactKey)).Out(quad.String("added_at"))
+				addedAtIt, _ := addedAtPath.BuildIterator().Optimize()
+				if addedAtIt.Next(ctx) {
+					addedAtToken := addedAtIt.Result()
+					addedAtStr := quad.ToString(r.store.NameOf(addedAtToken))
+					if t, err := time.Parse(time.RFC3339, addedAtStr); err == nil {
+						addedAt = t
+					}
+				}
+				addedAtIt.Close()
+
+				metadata := &models.ContactMetadata{
+					Name:    name,
+					AddedAt: addedAt,
+				}
+				edge.Metadata = metadata
+				edge.CreatedAt = addedAt
+			}
+			nameIt.Close()
+
+			edges = append(edges, edge)
 		}
 	} else if edgeType == models.EdgeTypeCall {
 		// Find all calls where to = phoneNumber
@@ -508,7 +704,7 @@ func (r *CayleyGraphRepository) getCallsByPhoneUnsafe(phoneNumber, direction str
 	for it.Next(ctx) {
 		token := it.Result()
 		callID := quad.ToString(r.store.NameOf(token))
-		if edge, err := r.getCallEdgeUnsafe(callID); err == nil {
+		if edge, _, err := r.getCallEdgeWithMetadataUnsafe(callID); err == nil {
 			edges = append(edges, edge)
 		}
 	}
@@ -519,7 +715,7 @@ func (r *CayleyGraphRepository) getCallsByPhoneUnsafe(phoneNumber, direction str
 // GetCallsWithFilters returns call edges with applied filters
 // Query 2: How many calls a phone number is making with filters
 // direction: "outgoing", "incoming", or "both"
-func (r *CayleyGraphRepository) GetCallsWithFilters(phoneNumber string, filters CallFilters, direction string) ([]*models.Edge, int) {
+func (r *CayleyGraphRepository) GetCallsWithFilters(ctx context.Context, phoneNumber string, filters CallFilters, direction string) ([]*models.Edge, int) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -557,20 +753,40 @@ func (r *CayleyGraphRepository) matchesCallFilters(edge *models.Edge, filters Ca
 		return false
 	}
 
-	callProps := models.ParseCallProperties(edge.Properties)
+	// Use metadata if available, otherwise fall back to properties
+	var callMeta *models.CallMetadata
+	if edge.Metadata != nil {
+		if cm, ok := edge.Metadata.(*models.CallMetadata); ok {
+			callMeta = cm
+		}
+	}
+
+	// Fallback to parsing properties for backward compatibility
+	if callMeta == nil {
+		props := edge.GetProperties()
+		if meta, err := r.registry.Deserialize(models.EdgeTypeCall, props); err == nil {
+			if cm, ok := meta.(*models.CallMetadata); ok {
+				callMeta = cm
+			}
+		}
+	}
+
+	if callMeta == nil {
+		return false
+	}
 
 	// Filter by IsAnswered
-	if filters.IsAnswered != nil && callProps.IsAnswered != *filters.IsAnswered {
+	if filters.IsAnswered != nil && callMeta.IsAnswered != *filters.IsAnswered {
 		return false
 	}
 
 	// Filter by MaxDuration
-	if filters.MaxDuration != nil && callProps.DurationInSeconds > *filters.MaxDuration {
+	if filters.MaxDuration != nil && callMeta.DurationInSeconds > *filters.MaxDuration {
 		return false
 	}
 
 	// Filter by MinDuration
-	if filters.MinDuration != nil && callProps.DurationInSeconds < *filters.MinDuration {
+	if filters.MinDuration != nil && callMeta.DurationInSeconds < *filters.MinDuration {
 		return false
 	}
 
@@ -587,8 +803,89 @@ func (r *CayleyGraphRepository) matchesCallFilters(edge *models.Edge, filters Ca
 	return true
 }
 
+// IsDirectContact checks if callerPhone is in userPhone's direct contacts (level 1)
+// Uses Cayley path query: userPhone -has_contact-> callerPhone
+func (r *CayleyGraphRepository) IsDirectContact(ctx context.Context, userPhone, callerPhone string) bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	// Query: userPhone -has_contact-> callerPhone
+	p := cayley.StartPath(r.store, quad.String(userPhone)).
+		Out(quad.String("has_contact")).
+		Is(quad.String(callerPhone))
+
+	it, _ := p.BuildIterator().Optimize()
+	defer it.Close()
+
+	return it.Next(ctx)
+}
+
+// GetSecondLevelContactCount counts how many of userPhone's contacts have callerPhone in their contacts
+// Uses Cayley path query: userPhone -has_contact-> ? -has_contact-> callerPhone
+// Returns the count of unique intermediate contacts (level 2 matches)
+func (r *CayleyGraphRepository) GetSecondLevelContactCount(ctx context.Context, userPhone, callerPhone string) int {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	// Query: Find all paths: userPhone -has_contact-> intermediate -has_contact-> callerPhone
+	// We traverse: userPhone -> Out("has_contact") -> Out("has_contact") -> Is(callerPhone)
+	// This finds all intermediate contacts that have callerPhone
+	p := cayley.StartPath(r.store, quad.String(userPhone)).
+		Out(quad.String("has_contact")).
+		Out(quad.String("has_contact")).
+		Is(quad.String(callerPhone))
+
+	it, _ := p.BuildIterator().Optimize()
+	defer it.Close()
+
+	// Count unique intermediate contacts
+	// We need to get the intermediate node (one hop from userPhone)
+	// So we need to track: userPhone -> contact -> callerPhone
+	// The intermediate contact is what we want to count
+
+	// Alternative approach: Get all contacts of userPhone, then check each
+	// But we can use a more efficient query by getting the path and extracting intermediate nodes
+
+	// Actually, to count unique intermediates, we need to:
+	// 1. Get all contacts of userPhone
+	// 2. For each, check if they have callerPhone
+	// But we can optimize with Cayley by using a different approach
+
+	// Let's use: Get all contacts of userPhone, then check which ones have callerPhone
+	contactsPath := cayley.StartPath(r.store, quad.String(userPhone)).Out(quad.String("has_contact"))
+	contactsIt, _ := contactsPath.BuildIterator().Optimize()
+	defer contactsIt.Close()
+
+	count := 0
+	checkedContacts := make(map[string]bool)
+
+	for contactsIt.Next(ctx) {
+		contactToken := contactsIt.Result()
+		contactPhone := quad.ToString(r.store.NameOf(contactToken))
+
+		// Skip if already checked
+		if checkedContacts[contactPhone] {
+			continue
+		}
+		checkedContacts[contactPhone] = true
+
+		// Check if this contact has callerPhone: contactPhone -has_contact-> callerPhone
+		hasCallerPath := cayley.StartPath(r.store, quad.String(contactPhone)).
+			Out(quad.String("has_contact")).
+			Is(quad.String(callerPhone))
+
+		hasCallerIt, _ := hasCallerPath.BuildIterator().Optimize()
+		if hasCallerIt.Next(ctx) {
+			count++
+		}
+		hasCallerIt.Close()
+	}
+
+	return count
+}
+
 // LoadSeedData loads graph seed data from a JSON file
-func (r *CayleyGraphRepository) LoadSeedData(filePath string) error {
+func (r *CayleyGraphRepository) LoadSeedData(ctx context.Context, filePath string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -598,10 +895,10 @@ func (r *CayleyGraphRepository) LoadSeedData(filePath string) error {
 		return err
 	}
 
-	// Parse the JSON
+	// Parse the JSON using EdgeJSON format
 	var seedData struct {
-		Nodes []*models.Node `json:"nodes"`
-		Edges []*models.Edge `json:"edges"`
+		Nodes []*models.Node     `json:"nodes"`
+		Edges []*models.EdgeJSON `json:"edges"`
 	}
 
 	if err := json.Unmarshal(data, &seedData); err != nil {
@@ -612,38 +909,54 @@ func (r *CayleyGraphRepository) LoadSeedData(filePath string) error {
 	for _, node := range seedData.Nodes {
 		if !r.nodeExistsUnsafe(node.PhoneNumber) {
 			r.store.AddQuad(quad.Make(node.PhoneNumber, "type", "node", nil))
+			if node.Name != "" {
+				r.store.AddQuad(quad.Make(node.PhoneNumber, "name", node.Name, nil))
+			}
 		}
 	}
 
 	// Load edges
-	for _, edge := range seedData.Edges {
+	for _, edgeJSON := range seedData.Edges {
 		// Ensure nodes exist
-		if !r.nodeExistsUnsafe(edge.From) {
-			r.store.AddQuad(quad.Make(edge.From, "type", "node", nil))
+		if !r.nodeExistsUnsafe(edgeJSON.From) {
+			r.store.AddQuad(quad.Make(edgeJSON.From, "type", "node", nil))
 		}
-		if !r.nodeExistsUnsafe(edge.To) {
-			r.store.AddQuad(quad.Make(edge.To, "type", "node", nil))
+		if !r.nodeExistsUnsafe(edgeJSON.To) {
+			r.store.AddQuad(quad.Make(edgeJSON.To, "type", "node", nil))
 		}
 
+		// Deserialize edge using registry
+		edge, err := edgeJSON.ToEdge(r.registry)
+		if err != nil {
+			return fmt.Errorf("failed to deserialize edge %s: %w", edgeJSON.ID, err)
+		}
+
+		// Store edge based on type
 		if edge.Type == models.EdgeTypeContact {
-			// Add contact edge (unidirectional as per seed data)
 			r.store.AddQuad(quad.Make(edge.From, "has_contact", edge.To, nil))
+
+			// Store contact metadata if available
+			if contactMeta, ok := edge.Metadata.(*models.ContactMetadata); ok {
+				contactKey := fmt.Sprintf("%s_contact_%s", edge.From, edge.To)
+				if contactMeta.Name != "" {
+					r.store.AddQuad(quad.Make(contactKey, "name", contactMeta.Name, nil))
+					r.store.AddQuad(quad.Make(contactKey, "from", edge.From, nil))
+					r.store.AddQuad(quad.Make(contactKey, "to", edge.To, nil))
+				}
+				if !contactMeta.AddedAt.IsZero() {
+					r.store.AddQuad(quad.Make(contactKey, "added_at", contactMeta.AddedAt.Format(time.RFC3339), nil))
+				}
+			}
 		} else if edge.Type == models.EdgeTypeCall {
-			// Add call edge with all properties
+			// Store call edge
 			r.store.AddQuad(quad.Make(edge.ID, "type", "call", nil))
 			r.store.AddQuad(quad.Make(edge.ID, "from", edge.From, nil))
 			r.store.AddQuad(quad.Make(edge.ID, "to", edge.To, nil))
 
-			if isAnswered, ok := edge.Properties["is_answered"].(bool); ok {
-				r.store.AddQuad(quad.Make(edge.ID, "is_answered", isAnswered, nil))
-			}
-			if duration, ok := edge.Properties["duration_in_seconds"].(float64); ok {
-				r.store.AddQuad(quad.Make(edge.ID, "duration", int(duration), nil))
-			} else if duration, ok := edge.Properties["duration_in_seconds"].(int); ok {
-				r.store.AddQuad(quad.Make(edge.ID, "duration", duration, nil))
-			}
-			if !edge.CreatedAt.IsZero() {
-				r.store.AddQuad(quad.Make(edge.ID, "created_at", edge.CreatedAt.Format(time.RFC3339), nil))
+			// Store all metadata properties
+			props := edge.GetProperties()
+			for key, value := range props {
+				r.store.AddQuad(quad.Make(edge.ID, key, value, nil))
 			}
 		}
 	}

@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"context"
 	"credCode/models"
 	"os"
 	"path/filepath"
@@ -34,13 +35,13 @@ func TestCreateUser(t *testing.T) {
 		Contacts:    []*models.Contact{},
 	}
 
-	err := repo.CreateUser(user)
+	err := repo.CreateUser(context.Background(), user)
 	if err != nil {
 		t.Fatalf("Expected no error, got: %v", err)
 	}
 
 	// Verify user was added
-	retrieved, err := repo.GetUserByID("test1")
+	retrieved, err := repo.GetUserByID(context.Background(), "test1")
 	if err != nil {
 		t.Fatalf("Expected to retrieve user, got error: %v", err)
 	}
@@ -67,12 +68,12 @@ func TestCreateUser_DuplicateID(t *testing.T) {
 		Contacts:    []*models.Contact{},
 	}
 
-	err := repo.CreateUser(user1)
+	err := repo.CreateUser(context.Background(), user1)
 	if err != nil {
 		t.Fatalf("Expected no error, got: %v", err)
 	}
 
-	err = repo.CreateUser(user2)
+	err = repo.CreateUser(context.Background(), user2)
 	if err != ErrUserExists {
 		t.Errorf("Expected ErrUserExists, got: %v", err)
 	}
@@ -96,12 +97,12 @@ func TestCreateUser_DuplicatePhone(t *testing.T) {
 		Contacts:    []*models.Contact{},
 	}
 
-	err := repo.CreateUser(user1)
+	err := repo.CreateUser(context.Background(), user1)
 	if err != nil {
 		t.Fatalf("Expected no error, got: %v", err)
 	}
 
-	err = repo.CreateUser(user2)
+	err = repo.CreateUser(context.Background(), user2)
 	if err != ErrUserExists {
 		t.Errorf("Expected ErrUserExists, got: %v", err)
 	}
@@ -118,9 +119,9 @@ func TestGetUserByID(t *testing.T) {
 		Contacts:    []*models.Contact{},
 	}
 
-	repo.CreateUser(user)
+	repo.CreateUser(context.Background(), user)
 
-	retrieved, err := repo.GetUserByID("test1")
+	retrieved, err := repo.GetUserByID(context.Background(), "test1")
 	if err != nil {
 		t.Fatalf("Expected no error, got: %v", err)
 	}
@@ -133,7 +134,7 @@ func TestGetUserByID(t *testing.T) {
 func TestGetUserByID_NotFound(t *testing.T) {
 	repo := NewInMemoryUserRepository()
 
-	_, err := repo.GetUserByID("nonexistent")
+	_, err := repo.GetUserByID(context.Background(), "nonexistent")
 	if err != ErrUserNotFound {
 		t.Errorf("Expected ErrUserNotFound, got: %v", err)
 	}
@@ -150,9 +151,9 @@ func TestGetUserByPhoneNumber(t *testing.T) {
 		Contacts:    []*models.Contact{},
 	}
 
-	repo.CreateUser(user)
+	repo.CreateUser(context.Background(), user)
 
-	retrieved, err := repo.GetUserByPhoneNumber("1111111111")
+	retrieved, err := repo.GetUserByPhoneNumber(context.Background(), "1111111111")
 	if err != nil {
 		t.Fatalf("Expected no error, got: %v", err)
 	}
@@ -165,7 +166,7 @@ func TestGetUserByPhoneNumber(t *testing.T) {
 func TestGetUserByPhoneNumber_NotFound(t *testing.T) {
 	repo := NewInMemoryUserRepository()
 
-	_, err := repo.GetUserByPhoneNumber("9999999999")
+	_, err := repo.GetUserByPhoneNumber(context.Background(), "9999999999")
 	if err != ErrUserNotFound {
 		t.Errorf("Expected ErrUserNotFound, got: %v", err)
 	}
@@ -182,10 +183,10 @@ func TestGetAllUsers(t *testing.T) {
 	}
 
 	for _, user := range users {
-		repo.CreateUser(user)
+		repo.CreateUser(context.Background(), user)
 	}
 
-	allUsers, err := repo.GetAllUsers()
+	allUsers, err := repo.GetAllUsers(context.Background(), )
 	if err != nil {
 		t.Fatalf("Expected no error, got: %v", err)
 	}
@@ -199,7 +200,7 @@ func TestGetAllUsers(t *testing.T) {
 func TestGetAllUsers_Empty(t *testing.T) {
 	repo := NewInMemoryUserRepository()
 
-	allUsers, err := repo.GetAllUsers()
+	allUsers, err := repo.GetAllUsers(context.Background(), )
 	if err != nil {
 		t.Fatalf("Expected no error, got: %v", err)
 	}
@@ -220,7 +221,7 @@ func TestUpdateUser(t *testing.T) {
 		Contacts:    []*models.Contact{},
 	}
 
-	repo.CreateUser(user)
+	repo.CreateUser(context.Background(), user)
 
 	// Update user
 	updatedUser := &models.User{
@@ -230,13 +231,13 @@ func TestUpdateUser(t *testing.T) {
 		Contacts:    []*models.Contact{},
 	}
 
-	err := repo.UpdateUser(updatedUser)
+	err := repo.UpdateUser(context.Background(), updatedUser)
 	if err != nil {
 		t.Fatalf("Expected no error, got: %v", err)
 	}
 
 	// Verify update
-	retrieved, _ := repo.GetUserByID("test1")
+	retrieved, _ := repo.GetUserByID(context.Background(), "test1")
 	if retrieved.Name != "Updated User" {
 		t.Errorf("Expected name 'Updated User', got '%s'", retrieved.Name)
 	}
@@ -253,7 +254,7 @@ func TestUpdateUser_PhoneNumberChange(t *testing.T) {
 		Contacts:    []*models.Contact{},
 	}
 
-	repo.CreateUser(user)
+	repo.CreateUser(context.Background(), user)
 
 	// Update phone number
 	updatedUser := &models.User{
@@ -263,13 +264,13 @@ func TestUpdateUser_PhoneNumberChange(t *testing.T) {
 		Contacts:    []*models.Contact{},
 	}
 
-	err := repo.UpdateUser(updatedUser)
+	err := repo.UpdateUser(context.Background(), updatedUser)
 	if err != nil {
 		t.Fatalf("Expected no error, got: %v", err)
 	}
 
 	// Verify new phone number works
-	retrieved, err := repo.GetUserByPhoneNumber("9999999999")
+	retrieved, err := repo.GetUserByPhoneNumber(context.Background(), "9999999999")
 	if err != nil {
 		t.Fatalf("Expected to find user by new phone, got error: %v", err)
 	}
@@ -278,7 +279,7 @@ func TestUpdateUser_PhoneNumberChange(t *testing.T) {
 	}
 
 	// Verify old phone number doesn't work
-	_, err = repo.GetUserByPhoneNumber("1111111111")
+	_, err = repo.GetUserByPhoneNumber(context.Background(), "1111111111")
 	if err != ErrUserNotFound {
 		t.Errorf("Expected ErrUserNotFound for old phone, got: %v", err)
 	}
@@ -295,7 +296,7 @@ func TestUpdateUser_NotFound(t *testing.T) {
 		Contacts:    []*models.Contact{},
 	}
 
-	err := repo.UpdateUser(user)
+	err := repo.UpdateUser(context.Background(), user)
 	if err != ErrUserNotFound {
 		t.Errorf("Expected ErrUserNotFound, got: %v", err)
 	}
@@ -312,21 +313,21 @@ func TestDeleteUser(t *testing.T) {
 		Contacts:    []*models.Contact{},
 	}
 
-	repo.CreateUser(user)
+	repo.CreateUser(context.Background(), user)
 
-	err := repo.DeleteUser("test1")
+	err := repo.DeleteUser(context.Background(), "test1")
 	if err != nil {
 		t.Fatalf("Expected no error, got: %v", err)
 	}
 
 	// Verify deletion
-	_, err = repo.GetUserByID("test1")
+	_, err = repo.GetUserByID(context.Background(), "test1")
 	if err != ErrUserNotFound {
 		t.Errorf("Expected ErrUserNotFound, got: %v", err)
 	}
 
 	// Verify phone mapping is also deleted
-	_, err = repo.GetUserByPhoneNumber("1111111111")
+	_, err = repo.GetUserByPhoneNumber(context.Background(), "1111111111")
 	if err != ErrUserNotFound {
 		t.Errorf("Expected ErrUserNotFound for phone, got: %v", err)
 	}
@@ -336,7 +337,7 @@ func TestDeleteUser(t *testing.T) {
 func TestDeleteUser_NotFound(t *testing.T) {
 	repo := NewInMemoryUserRepository()
 
-	err := repo.DeleteUser("nonexistent")
+	err := repo.DeleteUser(context.Background(), "nonexistent")
 	if err != ErrUserNotFound {
 		t.Errorf("Expected ErrUserNotFound, got: %v", err)
 	}
@@ -353,7 +354,7 @@ func TestAddContact(t *testing.T) {
 		Contacts:    []*models.Contact{},
 	}
 
-	repo.CreateUser(user)
+	repo.CreateUser(context.Background(), user)
 
 	contact := &models.Contact{
 		ID:          "c1",
@@ -362,13 +363,13 @@ func TestAddContact(t *testing.T) {
 		AddedAt:     time.Now(),
 	}
 
-	err := repo.AddContact("test1", contact)
+	err := repo.AddContact(context.Background(), "test1", contact)
 	if err != nil {
 		t.Fatalf("Expected no error, got: %v", err)
 	}
 
 	// Verify contact was added
-	contacts, _ := repo.GetUserContacts("test1")
+	contacts, _ := repo.GetUserContacts(context.Background(), "test1")
 	if len(contacts) != 1 {
 		t.Errorf("Expected 1 contact, got %d", len(contacts))
 	}
@@ -385,7 +386,7 @@ func TestAddContact_UserNotFound(t *testing.T) {
 		AddedAt:     time.Now(),
 	}
 
-	err := repo.AddContact("nonexistent", contact)
+	err := repo.AddContact(context.Background(), "nonexistent", contact)
 	if err != ErrUserNotFound {
 		t.Errorf("Expected ErrUserNotFound, got: %v", err)
 	}
@@ -402,7 +403,7 @@ func TestAddContact_Duplicate(t *testing.T) {
 		Contacts:    []*models.Contact{},
 	}
 
-	repo.CreateUser(user)
+	repo.CreateUser(context.Background(), user)
 
 	contact := &models.Contact{
 		ID:          "c1",
@@ -411,10 +412,10 @@ func TestAddContact_Duplicate(t *testing.T) {
 		AddedAt:     time.Now(),
 	}
 
-	repo.AddContact("test1", contact)
+	repo.AddContact(context.Background(), "test1", contact)
 
 	// Try to add same contact again
-	err := repo.AddContact("test1", contact)
+	err := repo.AddContact(context.Background(), "test1", contact)
 	if err != ErrContactExists {
 		t.Errorf("Expected ErrContactExists, got: %v", err)
 	}
@@ -431,7 +432,7 @@ func TestGetContact(t *testing.T) {
 		Contacts:    []*models.Contact{},
 	}
 
-	repo.CreateUser(user)
+	repo.CreateUser(context.Background(), user)
 
 	contact := &models.Contact{
 		ID:          "c1",
@@ -440,9 +441,9 @@ func TestGetContact(t *testing.T) {
 		AddedAt:     time.Now(),
 	}
 
-	repo.AddContact("test1", contact)
+	repo.AddContact(context.Background(), "test1", contact)
 
-	retrieved, err := repo.GetContact("test1", "c1")
+	retrieved, err := repo.GetContact(context.Background(), "test1", "c1")
 	if err != nil {
 		t.Fatalf("Expected no error, got: %v", err)
 	}
@@ -455,7 +456,7 @@ func TestGetContact(t *testing.T) {
 func TestGetContact_UserNotFound(t *testing.T) {
 	repo := NewInMemoryUserRepository()
 
-	_, err := repo.GetContact("nonexistent", "c1")
+	_, err := repo.GetContact(context.Background(), "nonexistent", "c1")
 	if err != ErrUserNotFound {
 		t.Errorf("Expected ErrUserNotFound, got: %v", err)
 	}
@@ -472,9 +473,9 @@ func TestGetContact_NotFound(t *testing.T) {
 		Contacts:    []*models.Contact{},
 	}
 
-	repo.CreateUser(user)
+	repo.CreateUser(context.Background(), user)
 
-	_, err := repo.GetContact("test1", "nonexistent")
+	_, err := repo.GetContact(context.Background(), "test1", "nonexistent")
 	if err != ErrContactNotFound {
 		t.Errorf("Expected ErrContactNotFound, got: %v", err)
 	}
@@ -491,7 +492,7 @@ func TestGetUserContacts(t *testing.T) {
 		Contacts:    []*models.Contact{},
 	}
 
-	repo.CreateUser(user)
+	repo.CreateUser(context.Background(), user)
 
 	contacts := []*models.Contact{
 		{ID: "c1", PhoneNumber: "2222222222", Name: "Contact 1", AddedAt: time.Now()},
@@ -500,10 +501,10 @@ func TestGetUserContacts(t *testing.T) {
 	}
 
 	for _, contact := range contacts {
-		repo.AddContact("test1", contact)
+		repo.AddContact(context.Background(), "test1", contact)
 	}
 
-	retrieved, err := repo.GetUserContacts("test1")
+	retrieved, err := repo.GetUserContacts(context.Background(), "test1")
 	if err != nil {
 		t.Fatalf("Expected no error, got: %v", err)
 	}
@@ -516,7 +517,7 @@ func TestGetUserContacts(t *testing.T) {
 func TestGetUserContacts_UserNotFound(t *testing.T) {
 	repo := NewInMemoryUserRepository()
 
-	_, err := repo.GetUserContacts("nonexistent")
+	_, err := repo.GetUserContacts(context.Background(), "nonexistent")
 	if err != ErrUserNotFound {
 		t.Errorf("Expected ErrUserNotFound, got: %v", err)
 	}
@@ -533,9 +534,9 @@ func TestGetUserContacts_Empty(t *testing.T) {
 		Contacts:    []*models.Contact{},
 	}
 
-	repo.CreateUser(user)
+	repo.CreateUser(context.Background(), user)
 
-	contacts, err := repo.GetUserContacts("test1")
+	contacts, err := repo.GetUserContacts(context.Background(), "test1")
 	if err != nil {
 		t.Fatalf("Expected no error, got: %v", err)
 	}
@@ -555,7 +556,7 @@ func TestUpdateContact(t *testing.T) {
 		Contacts:    []*models.Contact{},
 	}
 
-	repo.CreateUser(user)
+	repo.CreateUser(context.Background(), user)
 
 	contact := &models.Contact{
 		ID:          "c1",
@@ -564,7 +565,7 @@ func TestUpdateContact(t *testing.T) {
 		AddedAt:     time.Now(),
 	}
 
-	repo.AddContact("test1", contact)
+	repo.AddContact(context.Background(), "test1", contact)
 
 	// Update contact
 	updatedContact := &models.Contact{
@@ -574,13 +575,13 @@ func TestUpdateContact(t *testing.T) {
 		AddedAt:     time.Now(),
 	}
 
-	err := repo.UpdateContact("test1", updatedContact)
+	err := repo.UpdateContact(context.Background(), "test1", updatedContact)
 	if err != nil {
 		t.Fatalf("Expected no error, got: %v", err)
 	}
 
 	// Verify update
-	retrieved, _ := repo.GetContact("test1", "c1")
+	retrieved, _ := repo.GetContact(context.Background(), "test1", "c1")
 	if retrieved.Name != "Updated Contact" {
 		t.Errorf("Expected name 'Updated Contact', got '%s'", retrieved.Name)
 	}
@@ -600,7 +601,7 @@ func TestUpdateContact_UserNotFound(t *testing.T) {
 		AddedAt:     time.Now(),
 	}
 
-	err := repo.UpdateContact("nonexistent", contact)
+	err := repo.UpdateContact(context.Background(), "nonexistent", contact)
 	if err != ErrUserNotFound {
 		t.Errorf("Expected ErrUserNotFound, got: %v", err)
 	}
@@ -617,7 +618,7 @@ func TestUpdateContact_NotFound(t *testing.T) {
 		Contacts:    []*models.Contact{},
 	}
 
-	repo.CreateUser(user)
+	repo.CreateUser(context.Background(), user)
 
 	contact := &models.Contact{
 		ID:          "nonexistent",
@@ -626,7 +627,7 @@ func TestUpdateContact_NotFound(t *testing.T) {
 		AddedAt:     time.Now(),
 	}
 
-	err := repo.UpdateContact("test1", contact)
+	err := repo.UpdateContact(context.Background(), "test1", contact)
 	if err != ErrContactNotFound {
 		t.Errorf("Expected ErrContactNotFound, got: %v", err)
 	}
@@ -643,7 +644,7 @@ func TestDeleteContact(t *testing.T) {
 		Contacts:    []*models.Contact{},
 	}
 
-	repo.CreateUser(user)
+	repo.CreateUser(context.Background(), user)
 
 	contact := &models.Contact{
 		ID:          "c1",
@@ -652,15 +653,15 @@ func TestDeleteContact(t *testing.T) {
 		AddedAt:     time.Now(),
 	}
 
-	repo.AddContact("test1", contact)
+	repo.AddContact(context.Background(), "test1", contact)
 
-	err := repo.DeleteContact("test1", "c1")
+	err := repo.DeleteContact(context.Background(), "test1", "c1")
 	if err != nil {
 		t.Fatalf("Expected no error, got: %v", err)
 	}
 
 	// Verify deletion
-	_, err = repo.GetContact("test1", "c1")
+	_, err = repo.GetContact(context.Background(), "test1", "c1")
 	if err != ErrContactNotFound {
 		t.Errorf("Expected ErrContactNotFound, got: %v", err)
 	}
@@ -670,7 +671,7 @@ func TestDeleteContact(t *testing.T) {
 func TestDeleteContact_UserNotFound(t *testing.T) {
 	repo := NewInMemoryUserRepository()
 
-	err := repo.DeleteContact("nonexistent", "c1")
+	err := repo.DeleteContact(context.Background(), "nonexistent", "c1")
 	if err != ErrUserNotFound {
 		t.Errorf("Expected ErrUserNotFound, got: %v", err)
 	}
@@ -687,9 +688,9 @@ func TestDeleteContact_NotFound(t *testing.T) {
 		Contacts:    []*models.Contact{},
 	}
 
-	repo.CreateUser(user)
+	repo.CreateUser(context.Background(), user)
 
-	err := repo.DeleteContact("test1", "nonexistent")
+	err := repo.DeleteContact(context.Background(), "test1", "nonexistent")
 	if err != ErrContactNotFound {
 		t.Errorf("Expected ErrContactNotFound, got: %v", err)
 	}
@@ -732,19 +733,19 @@ func TestLoadSeedData(t *testing.T) {
 		t.Fatalf("Failed to create test file: %v", err)
 	}
 
-	err = repo.LoadSeedData(testFile)
+	err = repo.LoadSeedData(context.Background(), testFile)
 	if err != nil {
 		t.Fatalf("Expected no error, got: %v", err)
 	}
 
 	// Verify data was loaded
-	users, _ := repo.GetAllUsers()
+	users, _ := repo.GetAllUsers(context.Background(), )
 	if len(users) != 2 {
 		t.Errorf("Expected 2 users, got %d", len(users))
 	}
 
 	// Verify user 1 with contact
-	user1, err := repo.GetUserByID("1")
+	user1, err := repo.GetUserByID(context.Background(), "1")
 	if err != nil {
 		t.Fatalf("Expected to find user 1, got error: %v", err)
 	}
@@ -756,7 +757,7 @@ func TestLoadSeedData(t *testing.T) {
 	}
 
 	// Verify user can be found by phone
-	user2, err := repo.GetUserByPhoneNumber("3333333333")
+	user2, err := repo.GetUserByPhoneNumber(context.Background(), "3333333333")
 	if err != nil {
 		t.Fatalf("Expected to find user by phone, got error: %v", err)
 	}
@@ -769,7 +770,7 @@ func TestLoadSeedData(t *testing.T) {
 func TestLoadSeedData_FileNotFound(t *testing.T) {
 	repo := NewInMemoryUserRepository()
 
-	err := repo.LoadSeedData("nonexistent_file.json")
+	err := repo.LoadSeedData(context.Background(), "nonexistent_file.json")
 	if err == nil {
 		t.Error("Expected error for non-existent file")
 	}
@@ -788,7 +789,7 @@ func TestLoadSeedData_InvalidJSON(t *testing.T) {
 		t.Fatalf("Failed to create test file: %v", err)
 	}
 
-	err = repo.LoadSeedData(testFile)
+	err = repo.LoadSeedData(context.Background(), testFile)
 	if err == nil {
 		t.Error("Expected error for invalid JSON")
 	}
@@ -810,14 +811,14 @@ func TestConcurrentUserOperations(t *testing.T) {
 				Name:        "User " + string(rune('0' + id)),
 				Contacts:    []*models.Contact{},
 			}
-			repo.CreateUser(user)
+			repo.CreateUser(context.Background(), user)
 		}(i)
 	}
 
 	wg.Wait()
 
 	// Verify all users were created
-	users, _ := repo.GetAllUsers()
+	users, _ := repo.GetAllUsers(context.Background(), )
 	if len(users) != 10 {
 		t.Errorf("Expected 10 users after concurrent creates, got %d", len(users))
 	}
@@ -827,7 +828,7 @@ func TestConcurrentUserOperations(t *testing.T) {
 		wg.Add(1)
 		go func(id int) {
 			defer wg.Done()
-			repo.GetUserByID(string(rune('0' + id)))
+			repo.GetUserByID(context.Background(), string(rune('0' + id)))
 		}(i)
 	}
 
@@ -845,7 +846,7 @@ func TestConcurrentContactOperations(t *testing.T) {
 		Contacts:    []*models.Contact{},
 	}
 
-	repo.CreateUser(user)
+	repo.CreateUser(context.Background(), user)
 
 	var wg sync.WaitGroup
 
@@ -860,14 +861,14 @@ func TestConcurrentContactOperations(t *testing.T) {
 				Name:        "Contact " + string(rune('0' + id)),
 				AddedAt:     time.Now(),
 			}
-			repo.AddContact("test1", contact)
+			repo.AddContact(context.Background(), "test1", contact)
 		}(i)
 	}
 
 	wg.Wait()
 
 	// Verify all contacts were added
-	contacts, _ := repo.GetUserContacts("test1")
+	contacts, _ := repo.GetUserContacts(context.Background(), "test1")
 	if len(contacts) != 10 {
 		t.Errorf("Expected 10 contacts after concurrent adds, got %d", len(contacts))
 	}
@@ -885,7 +886,7 @@ func TestConcurrentMixedOperations(t *testing.T) {
 			Name:        "User " + string(rune('0' + i)),
 			Contacts:    []*models.Contact{},
 		}
-		repo.CreateUser(user)
+		repo.CreateUser(context.Background(), user)
 	}
 
 	var wg sync.WaitGroup
@@ -897,7 +898,7 @@ func TestConcurrentMixedOperations(t *testing.T) {
 			defer wg.Done()
 			switch id % 4 {
 			case 0: // Read
-				repo.GetUserByID(string(rune('0' + (id % 5))))
+				repo.GetUserByID(context.Background(), string(rune('0' + (id % 5))))
 			case 1: // Update
 				user := &models.User{
 					ID:          string(rune('0' + (id % 5))),
@@ -905,11 +906,11 @@ func TestConcurrentMixedOperations(t *testing.T) {
 					Name:        "Updated User",
 					Contacts:    []*models.Contact{},
 				}
-				repo.UpdateUser(user)
+				repo.UpdateUser(context.Background(), user)
 			case 2: // GetAllUsers
-				repo.GetAllUsers()
+				repo.GetAllUsers(context.Background(), )
 			case 3: // GetUserByPhoneNumber
-				repo.GetUserByPhoneNumber(string(rune('0' + (id % 5))) + "000000000")
+				repo.GetUserByPhoneNumber(context.Background(), string(rune('0' + (id % 5))) + "000000000")
 			}
 		}(i)
 	}
@@ -917,7 +918,7 @@ func TestConcurrentMixedOperations(t *testing.T) {
 	wg.Wait()
 
 	// Verify repository is still consistent
-	users, err := repo.GetAllUsers()
+	users, err := repo.GetAllUsers(context.Background(), )
 	if err != nil {
 		t.Fatalf("Expected no error after concurrent operations, got: %v", err)
 	}
@@ -937,7 +938,7 @@ func TestDeleteContact_MultipleContacts(t *testing.T) {
 		Contacts:    []*models.Contact{},
 	}
 
-	repo.CreateUser(user)
+	repo.CreateUser(context.Background(), user)
 
 	// Add multiple contacts
 	contacts := []*models.Contact{
@@ -947,17 +948,17 @@ func TestDeleteContact_MultipleContacts(t *testing.T) {
 	}
 
 	for _, contact := range contacts {
-		repo.AddContact("test1", contact)
+		repo.AddContact(context.Background(), "test1", contact)
 	}
 
 	// Delete middle contact
-	err := repo.DeleteContact("test1", "c2")
+	err := repo.DeleteContact(context.Background(), "test1", "c2")
 	if err != nil {
 		t.Fatalf("Expected no error, got: %v", err)
 	}
 
 	// Verify deletion
-	remaining, _ := repo.GetUserContacts("test1")
+	remaining, _ := repo.GetUserContacts(context.Background(), "test1")
 	if len(remaining) != 2 {
 		t.Errorf("Expected 2 contacts remaining, got %d", len(remaining))
 	}

@@ -1,1 +1,1 @@
-/Users/admin_1/.local/bin/trivy fs --list-all-pkgs --scanners=misconfig,vuln,secret,license --severity=CRITICAL,HIGH,MEDIUM,LOW,UNKNOWN --format=json --output=/Users/admin_1/Library/Caches/JetBrains/GoLand2025.2/Trivy/trivy-46eec8cc-66bd-40f5-9fa2-32706e66909e.json /Users/admin_1/credCode
+/Users/admin_1/.local/bin/trivy fs --list-all-pkgs --scanners=misconfig,vuln,secret,license --severity=CRITICAL,HIGH,MEDIUM,LOW,UNKNOWN --format=json --output=/Users/admin_1/Library/Caches/JetBrains/GoLand2025.2/Trivy/trivy-f8c7b1e1-2423-472f-9efd-c377607b7cc9.json /Users/admin_1/credCode

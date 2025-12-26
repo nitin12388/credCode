@@ -25,13 +25,13 @@ const (
 type EdgeMetadata interface {
 	// EdgeType returns the edge type this metadata belongs to
 	EdgeType() EdgeType
-	
+
 	// ToProperties converts metadata to a map for storage
 	ToProperties() map[string]interface{}
-	
+
 	// Validate ensures the metadata is valid
 	Validate() error
-	
+
 	// FromProperties deserializes metadata from a map
 	FromProperties(props map[string]interface{}) error
 }
@@ -39,10 +39,10 @@ type EdgeMetadata interface {
 // Edge represents a relationship between two nodes
 type Edge struct {
 	ID        string       `json:"id"`
-	From      string       `json:"from"`        // phone number
-	To        string       `json:"to"`          // phone number
+	From      string       `json:"from"` // phone number
+	To        string       `json:"to"`   // phone number
 	Type      EdgeType     `json:"type"`
-	Metadata  EdgeMetadata `json:"-"`          // metadata object (not serialized directly)
+	Metadata  EdgeMetadata `json:"-"` // metadata object (not serialized directly)
 	CreatedAt time.Time    `json:"created_at"`
 }
 
@@ -78,8 +78,8 @@ func (cm *ContactMetadata) EdgeType() EdgeType {
 // ToProperties converts ContactMetadata to a map
 func (cm *ContactMetadata) ToProperties() map[string]interface{} {
 	return map[string]interface{}{
-		"name":      cm.Name,
-		"added_at":  cm.AddedAt.Format(time.RFC3339),
+		"name":     cm.Name,
+		"added_at": cm.AddedAt.Format(time.RFC3339),
 	}
 }
 
@@ -88,7 +88,7 @@ func (cm *ContactMetadata) FromProperties(props map[string]interface{}) error {
 	if name, ok := props["name"].(string); ok {
 		cm.Name = name
 	}
-	
+
 	if addedAtStr, ok := props["added_at"].(string); ok {
 		if t, err := time.Parse(time.RFC3339, addedAtStr); err == nil {
 			cm.AddedAt = t
@@ -96,15 +96,13 @@ func (cm *ContactMetadata) FromProperties(props map[string]interface{}) error {
 			return fmt.Errorf("invalid added_at format: %w", err)
 		}
 	}
-	
+
 	return nil
 }
 
 // Validate ensures ContactMetadata is valid
 func (cm *ContactMetadata) Validate() error {
-	if cm.Name == "" {
-		return errors.New("contact name cannot be empty")
-	}
+	// Name can be empty for backward compatibility
 	if cm.AddedAt.IsZero() {
 		cm.AddedAt = time.Now() // Default to current time if not set
 	}
@@ -137,13 +135,13 @@ func (cm *CallMetadata) FromProperties(props map[string]interface{}) error {
 	if isAnswered, ok := props["is_answered"].(bool); ok {
 		cm.IsAnswered = isAnswered
 	}
-	
+
 	if duration, ok := props["duration_in_seconds"].(int); ok {
 		cm.DurationInSeconds = duration
 	} else if duration, ok := props["duration_in_seconds"].(float64); ok {
 		cm.DurationInSeconds = int(duration)
 	}
-	
+
 	if timestampStr, ok := props["timestamp"].(string); ok {
 		if t, err := time.Parse(time.RFC3339, timestampStr); err == nil {
 			cm.Timestamp = t
@@ -154,7 +152,7 @@ func (cm *CallMetadata) FromProperties(props map[string]interface{}) error {
 			cm.Timestamp = t
 		}
 	}
-	
+
 	return nil
 }
 
@@ -179,11 +177,11 @@ func NewEdgeMetadataRegistry() *EdgeMetadataRegistry {
 	registry := &EdgeMetadataRegistry{
 		factories: make(map[EdgeType]func() EdgeMetadata),
 	}
-	
+
 	// Register default edge types
 	registry.Register(EdgeTypeContact, func() EdgeMetadata { return &ContactMetadata{} })
 	registry.Register(EdgeTypeCall, func() EdgeMetadata { return &CallMetadata{} })
-	
+
 	return registry
 }
 
@@ -198,12 +196,12 @@ func (r *EdgeMetadataRegistry) Deserialize(edgeType EdgeType, props map[string]i
 	if !exists {
 		return nil, fmt.Errorf("unknown edge type: %s", edgeType)
 	}
-	
+
 	metadata := factory()
 	if err := metadata.FromProperties(props); err != nil {
 		return nil, fmt.Errorf("failed to deserialize metadata: %w", err)
 	}
-	
+
 	return metadata, nil
 }
 
@@ -236,15 +234,15 @@ func (ej *EdgeJSON) ToEdge(registry *EdgeMetadataRegistry) (*Edge, error) {
 		Type:      ej.Type,
 		CreatedAt: ej.CreatedAt,
 	}
-	
-	if ej.Properties != nil && len(ej.Properties) > 0 {
+
+	if len(ej.Properties) > 0 {
 		metadata, err := registry.Deserialize(ej.Type, ej.Properties)
 		if err != nil {
 			return nil, err
 		}
 		edge.Metadata = metadata
 	}
-	
+
 	return edge, nil
 }
 
@@ -277,16 +275,16 @@ func (cp *CallProperties) ToMap() map[string]interface{} {
 // ParseCallProperties extracts call properties from an edge (backward compatibility)
 func ParseCallProperties(properties map[string]interface{}) *CallProperties {
 	cp := &CallProperties{}
-	
+
 	if isAnswered, ok := properties["is_answered"].(bool); ok {
 		cp.IsAnswered = isAnswered
 	}
-	
+
 	if duration, ok := properties["duration_in_seconds"].(int); ok {
 		cp.DurationInSeconds = duration
 	} else if duration, ok := properties["duration_in_seconds"].(float64); ok {
 		cp.DurationInSeconds = int(duration)
 	}
-	
+
 	return cp
 }

@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"os"
@@ -19,22 +20,22 @@ var (
 // UserRepository defines the interface for user operations
 type UserRepository interface {
 	// User CRUD operations
-	CreateUser(user *models.User) error
-	GetUserByID(id string) (*models.User, error)
-	GetUserByPhoneNumber(phone string) (*models.User, error)
-	GetAllUsers() ([]*models.User, error)
-	UpdateUser(user *models.User) error
-	DeleteUser(id string) error
+	CreateUser(ctx context.Context, user *models.User) error
+	GetUserByID(ctx context.Context, id string) (*models.User, error)
+	GetUserByPhoneNumber(ctx context.Context, phone string) (*models.User, error)
+	GetAllUsers(ctx context.Context) ([]*models.User, error)
+	UpdateUser(ctx context.Context, user *models.User) error
+	DeleteUser(ctx context.Context, id string) error
 
 	// Contact CRUD operations
-	AddContact(userID string, contact *models.Contact) error
-	GetContact(userID, contactID string) (*models.Contact, error)
-	GetUserContacts(userID string) ([]*models.Contact, error)
-	UpdateContact(userID string, contact *models.Contact) error
-	DeleteContact(userID, contactID string) error
+	AddContact(ctx context.Context, userID string, contact *models.Contact) error
+	GetContact(ctx context.Context, userID, contactID string) (*models.Contact, error)
+	GetUserContacts(ctx context.Context, userID string) ([]*models.Contact, error)
+	UpdateContact(ctx context.Context, userID string, contact *models.Contact) error
+	DeleteContact(ctx context.Context, userID, contactID string) error
 
 	// Seed data operations
-	LoadSeedData(filePath string) error
+	LoadSeedData(ctx context.Context, filePath string) error
 }
 
 // InMemoryUserRepository implements UserRepository with in-memory storage
@@ -53,7 +54,7 @@ func NewInMemoryUserRepository() *InMemoryUserRepository {
 }
 
 // CreateUser creates a new user
-func (r *InMemoryUserRepository) CreateUser(user *models.User) error {
+func (r *InMemoryUserRepository) CreateUser(ctx context.Context, user *models.User) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -71,7 +72,7 @@ func (r *InMemoryUserRepository) CreateUser(user *models.User) error {
 }
 
 // GetUserByID retrieves a user by ID
-func (r *InMemoryUserRepository) GetUserByID(id string) (*models.User, error) {
+func (r *InMemoryUserRepository) GetUserByID(ctx context.Context, id string) (*models.User, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -83,7 +84,7 @@ func (r *InMemoryUserRepository) GetUserByID(id string) (*models.User, error) {
 }
 
 // GetUserByPhoneNumber retrieves a user by phone number
-func (r *InMemoryUserRepository) GetUserByPhoneNumber(phone string) (*models.User, error) {
+func (r *InMemoryUserRepository) GetUserByPhoneNumber(ctx context.Context, phone string) (*models.User, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -100,7 +101,7 @@ func (r *InMemoryUserRepository) GetUserByPhoneNumber(phone string) (*models.Use
 }
 
 // GetAllUsers retrieves all users
-func (r *InMemoryUserRepository) GetAllUsers() ([]*models.User, error) {
+func (r *InMemoryUserRepository) GetAllUsers(ctx context.Context) ([]*models.User, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -112,7 +113,7 @@ func (r *InMemoryUserRepository) GetAllUsers() ([]*models.User, error) {
 }
 
 // UpdateUser updates an existing user
-func (r *InMemoryUserRepository) UpdateUser(user *models.User) error {
+func (r *InMemoryUserRepository) UpdateUser(ctx context.Context, user *models.User) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -132,7 +133,7 @@ func (r *InMemoryUserRepository) UpdateUser(user *models.User) error {
 }
 
 // DeleteUser deletes a user
-func (r *InMemoryUserRepository) DeleteUser(id string) error {
+func (r *InMemoryUserRepository) DeleteUser(ctx context.Context, id string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -147,7 +148,7 @@ func (r *InMemoryUserRepository) DeleteUser(id string) error {
 }
 
 // AddContact adds a contact to a user's contact list
-func (r *InMemoryUserRepository) AddContact(userID string, contact *models.Contact) error {
+func (r *InMemoryUserRepository) AddContact(ctx context.Context, userID string, contact *models.Contact) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -168,7 +169,7 @@ func (r *InMemoryUserRepository) AddContact(userID string, contact *models.Conta
 }
 
 // GetContact retrieves a specific contact from a user's contact list
-func (r *InMemoryUserRepository) GetContact(userID, contactID string) (*models.Contact, error) {
+func (r *InMemoryUserRepository) GetContact(ctx context.Context, userID, contactID string) (*models.Contact, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -187,7 +188,7 @@ func (r *InMemoryUserRepository) GetContact(userID, contactID string) (*models.C
 }
 
 // GetUserContacts retrieves all contacts for a user
-func (r *InMemoryUserRepository) GetUserContacts(userID string) ([]*models.Contact, error) {
+func (r *InMemoryUserRepository) GetUserContacts(ctx context.Context, userID string) ([]*models.Contact, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -200,7 +201,7 @@ func (r *InMemoryUserRepository) GetUserContacts(userID string) ([]*models.Conta
 }
 
 // UpdateContact updates a contact in a user's contact list
-func (r *InMemoryUserRepository) UpdateContact(userID string, contact *models.Contact) error {
+func (r *InMemoryUserRepository) UpdateContact(ctx context.Context, userID string, contact *models.Contact) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -220,7 +221,7 @@ func (r *InMemoryUserRepository) UpdateContact(userID string, contact *models.Co
 }
 
 // DeleteContact removes a contact from a user's contact list
-func (r *InMemoryUserRepository) DeleteContact(userID, contactID string) error {
+func (r *InMemoryUserRepository) DeleteContact(ctx context.Context, userID, contactID string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -240,7 +241,7 @@ func (r *InMemoryUserRepository) DeleteContact(userID, contactID string) error {
 }
 
 // LoadSeedData loads seed data from a JSON file
-func (r *InMemoryUserRepository) LoadSeedData(filePath string) error {
+func (r *InMemoryUserRepository) LoadSeedData(ctx context.Context, filePath string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -267,4 +268,3 @@ func (r *InMemoryUserRepository) LoadSeedData(filePath string) error {
 
 	return nil
 }
-
